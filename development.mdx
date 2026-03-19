@@ -14,7 +14,7 @@ This page is for contributors who edit the ByteKit docs site itself.
 ## Prerequisites
 
 - Node.js 18 or newer
-- The Mintlify CLI available as `mint`
+- The `mint` docs CLI available in your shell
 - Access to the `bytekit` package repo when you need to verify exports or examples
 
 ## Run the docs site locally
@@ -37,11 +37,11 @@ mint broken-links
 
 ## Keep docs aligned with the package
 
-This site documents ByteKit, not Mintlify itself. When you update content:
+This site should reflect the real ByteKit package surface. When you update content:
 
 - Verify import paths against the package `exports` map.
 - Prefer examples that match the actual public API.
-- Remove or rewrite starter content that refers to generic Mintlify demos.
+- Remove or rewrite generic starter content that does not describe ByteKit.
 - Keep the landing page and reference pages aligned with the package surface area.
 
 ## Where to edit common things
@@ -64,7 +64,7 @@ This site documents ByteKit, not Mintlify itself. When you update content:
 
 <Steps>
   <Step title="Confirm the package API">
-    Check the `bytekit` repo before documenting modules, options, or import paths.
+    Check the `bytekit` repo before documenting modules, options, import paths, or examples.
   </Step>
   <Step title="Edit the relevant page">
     Keep the page scoped to one job: getting started, a guide, or package reference.
@@ -77,7 +77,9 @@ This site documents ByteKit, not Mintlify itself. When you update content:
   </Step>
 </Steps>
 
-## Current cleanup still worth doing
+## What a good docs change looks like
 
-- Rewrite `README.md` so it no longer presents this repo as the Mintlify starter kit.
-- Customize `AGENTS.md` with bytekit-specific terminology and content boundaries.
+- The page speaks about ByteKit, not the docs platform.
+- Code samples match current public exports.
+- Navigation stays in sync with the content.
+- `mint broken-links` passes before commit.
