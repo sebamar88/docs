@@ -1,0 +1,20 @@
+---
+title: "Async timing"
+description: "Timing helpers from bytekit/async."
+---
+
+## Exports
+
+- `sleep(ms, signal?)`
+- `timeout(promise, ms, message?)`
+- `withTimeout(fn, ms, message?)`
+
+## Example
+
+```ts
+import { sleep, timeout, withTimeout } from "bytekit/async";
+
+await sleep(500);
+const report = await timeout(fetchReport(), 5000);
+const guardedFetch = withTimeout(fetchReportById, 5000);
+```

@@ -1,0 +1,51 @@
+---
+title: "ResponseValidator"
+description: "Built-in response validation utilities."
+---
+
+## Import
+
+```ts
+import { ResponseValidator } from "bytekit/response-validator";
+```
+
+## What it does
+
+`ResponseValidator` validates runtime payloads against a lightweight schema shape. Use it when you want built-in validation without adding Zod or Valibot.
+
+## Schema features
+
+- `type`
+- `required`
+- `properties`
+- `items`
+- `minLength`
+- `maxLength`
+- `minimum`
+- `maximum`
+- `pattern`
+- `enum`
+- `custom`
+
+## Example
+
+```ts
+const schema = {
+  type: "object",
+  properties: {
+    id: { type: "number", required: true },
+    email: { type: "string", required: true, pattern: /.+@.+\..+/ },
+  },
+} as const;
+
+const errors = ResponseValidator.validate(
+  { id: 1, email: "ada@example.com" },
+  schema
+);
+```
+
+## When to use it
+
+- You want a package-native validator
+- You only need structural runtime checks
+- You do not want an external schema library

@@ -1,0 +1,37 @@
+---
+title: "RateLimiter"
+description: "Reference for RateLimiter and SlidingWindowRateLimiter."
+---
+
+## Import
+
+```ts
+import { RateLimiter, SlidingWindowRateLimiter } from "bytekit/rate-limiter";
+```
+
+## `RateLimiter`
+
+Token bucket limiter for outbound request control.
+
+### Example
+
+```ts
+const limiter = new RateLimiter({
+  maxRequests: 20,
+  windowMs: 60_000,
+});
+
+await limiter.waitForAllowance("https://api.example.com/users");
+```
+
+### Main methods
+
+- `isAllowed(url)`
+- `getStats(url)`
+- `waitForAllowance(url)`
+- `reset(url)`
+- `resetAll()`
+
+## `SlidingWindowRateLimiter`
+
+Alternative limiter with tighter rate accounting and more memory usage.

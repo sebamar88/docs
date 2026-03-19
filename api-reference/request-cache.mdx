@@ -1,0 +1,41 @@
+---
+title: "RequestCache"
+description: "Class reference and examples for RequestCache."
+---
+
+## Import
+
+```ts
+import { RequestCache } from "bytekit/request-cache";
+```
+
+## Config
+
+- `ttl`
+- `staleWhileRevalidate`
+- `keyGenerator`
+
+## Example
+
+```ts
+const cache = new RequestCache({
+  ttl: 60_000,
+  staleWhileRevalidate: 15_000,
+});
+
+const cached = cache.get("/catalog");
+if (!cached) {
+  cache.set("/catalog", await loadCatalog());
+}
+```
+
+## Main methods
+
+- `get(url, options?)`
+- `set(url, data, ttl?, options?)`
+- `isStale(url, options?)`
+- `invalidate(url, options?)`
+- `invalidatePattern(pattern)`
+- `clear()`
+- `getStats()`
+- `prune()`

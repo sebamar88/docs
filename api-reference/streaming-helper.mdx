@@ -1,0 +1,31 @@
+---
+title: "StreamingHelper"
+description: "Class reference and examples for StreamingHelper."
+---
+
+## Import
+
+```ts
+import { StreamingHelper } from "bytekit/streaming";
+```
+
+## Main methods
+
+- `streamJsonLines(endpoint, options?)`
+- `streamSSE(endpoint, options?)`
+- `downloadStream(endpoint, options?)`
+
+## NDJSON example
+
+```ts
+const result = await StreamingHelper.streamJsonLines("/api/logs", {
+  onChunk: (chunk) => console.log(chunk),
+});
+```
+
+## SSE example
+
+```ts
+const stream = StreamingHelper.streamSSE("/api/prices");
+const unsubscribe = stream.subscribe((data) => console.log(data));
+```

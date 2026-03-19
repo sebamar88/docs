@@ -1,0 +1,33 @@
+---
+title: "EventEmitter"
+description: "Class reference and examples for EventEmitter."
+---
+
+## Import
+
+```ts
+import { EventEmitter } from "bytekit/event-emitter";
+```
+
+## Main methods
+
+- `on(event, listener)`
+- `once(event, listener)`
+- `off(event, listener)`
+- `removeAllListeners(event?)`
+- `emit(event, data)`
+- `emitSync(event, data)`
+- `onError(listener)`
+- `listenerCount(event)`
+
+## Example
+
+```ts
+type Events = {
+  "job:done": { id: string };
+};
+
+const emitter = new EventEmitter<Events>();
+emitter.on("job:done", ({ id }) => console.log(id));
+await emitter.emit("job:done", { id: "42" });
+```

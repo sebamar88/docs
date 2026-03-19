@@ -1,0 +1,37 @@
+---
+title: "RetryPolicy"
+description: "Class reference and examples for RetryPolicy."
+---
+
+## Import
+
+```ts
+import { RetryPolicy } from "bytekit/retry-policy";
+```
+
+## Config
+
+- `maxAttempts`
+- `initialDelayMs`
+- `maxDelayMs`
+- `backoffMultiplier`
+- `shouldRetry`
+
+## Example
+
+```ts
+const retryPolicy = new RetryPolicy({
+  maxAttempts: 3,
+  initialDelayMs: 200,
+  maxDelayMs: 5000,
+  backoffMultiplier: 2,
+});
+
+const data = await retryPolicy.execute(() => fetchData());
+```
+
+## Use it when
+
+- failures are transient
+- a full HTTP client is not involved
+- you want reusable retry policy outside request code

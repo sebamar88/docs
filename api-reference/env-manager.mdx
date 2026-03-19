@@ -1,0 +1,25 @@
+---
+title: "EnvManager"
+description: "Class reference and examples for EnvManager."
+---
+
+## Import
+
+```ts
+import { EnvManager } from "bytekit/env-manager";
+```
+
+## Main methods
+
+- `get(name)`
+- `require(name)`
+- `isProd()`
+
+## Example
+
+```ts
+const env = new EnvManager();
+
+const apiUrl = env.require("API_URL");
+const locale = env.get("APP_LOCALE") || "en";
+```

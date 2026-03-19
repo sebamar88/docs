@@ -1,0 +1,34 @@
+---
+title: "CircuitBreaker"
+description: "Class reference and examples for CircuitBreaker."
+---
+
+## Import
+
+```ts
+import { CircuitBreaker } from "bytekit/retry-policy";
+```
+
+## Config
+
+- `failureThreshold`
+- `successThreshold`
+- `timeoutMs`
+- `errorMessageFormatter`
+
+## Example
+
+```ts
+const breaker = new CircuitBreaker({
+  failureThreshold: 5,
+  timeoutMs: 30_000,
+});
+
+const result = await breaker.execute(() => fetchCriticalData());
+```
+
+## Main methods
+
+- `execute(fn)`
+- `getState()`
+- `reset()`

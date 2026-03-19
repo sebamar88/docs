@@ -1,0 +1,33 @@
+---
+title: "RequestDeduplicator"
+description: "Class reference and examples for RequestDeduplicator."
+---
+
+## Import
+
+```ts
+import { RequestDeduplicator } from "bytekit/request-deduplicator";
+```
+
+## What it does
+
+`RequestDeduplicator` shares a single in-flight promise across equivalent requests.
+
+## Example
+
+```ts
+const deduplicator = new RequestDeduplicator();
+
+const [a, b] = await Promise.all([
+  deduplicator.execute("/me", () => api.get("/me")),
+  deduplicator.execute("/me", () => api.get("/me")),
+]);
+```
+
+## Main methods
+
+- `execute(url, fn, options?)`
+- `getStats()`
+- `getInFlightCount()`
+- `clear()`
+- `resetStats()`

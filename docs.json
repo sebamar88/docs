@@ -55,18 +55,58 @@
             ]
           },
           {
-            "group": "Core modules",
+            "group": "HTTP",
             "pages": [
               "api-reference/http-client",
+              "api-reference/api-client",
+              "api-reference/response-validator",
+              "api-reference/schema-adapters"
+            ]
+          },
+          {
+            "group": "Resilience",
+            "pages": [
               "api-reference/resilience",
+              "api-reference/retry-policy",
+              "api-reference/circuit-breaker",
+              "api-reference/request-cache",
+              "api-reference/request-deduplicator",
+              "api-reference/rate-limiter",
+              "api-reference/error-boundary"
+            ]
+          },
+          {
+            "group": "Async",
+            "pages": [
               "api-reference/async",
-              "api-reference/observability"
+              "api-reference/async-timing",
+              "api-reference/async-control",
+              "api-reference/async-concurrency"
+            ]
+          },
+          {
+            "group": "Observability",
+            "pages": [
+              "api-reference/observability",
+              "api-reference/logger",
+              "api-reference/profiler"
             ]
           },
           {
             "group": "Helpers",
             "pages": [
-              "api-reference/helpers"
+              "api-reference/helpers",
+              "api-reference/env-manager",
+              "api-reference/storage-utils",
+              "api-reference/file-upload-helper",
+              "api-reference/streaming-helper",
+              "api-reference/websocket-helper",
+              "api-reference/cache-manager",
+              "api-reference/compression-utils",
+              "api-reference/crypto-utils",
+              "api-reference/diff-utils",
+              "api-reference/event-emitter",
+              "api-reference/polling-helper"
             ]
           }
         ]

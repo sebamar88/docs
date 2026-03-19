@@ -1,0 +1,52 @@
+---
+title: "Schema adapters"
+description: "Use zodAdapter and valibotAdapter with ApiClient."
+---
+
+## Imports
+
+```ts
+import { zodAdapter, valibotAdapter } from "bytekit/schema-adapter";
+```
+
+## What they do
+
+Schema adapters let `ApiClient` validate responses through external schema libraries while keeping the request API consistent.
+
+## Zod example
+
+```ts
+import { ApiClient } from "bytekit";
+import { zodAdapter } from "bytekit/schema-adapter";
+import { z } from "zod";
+
+const UserSchema = z.object({
+  id: z.number(),
+  name: z.string(),
+});
+
+const api = new ApiClient({ baseUrl: "https://api.example.com" });
+
+const user = await api.get("/users/1", {
+  validateResponse: zodAdapter(UserSchema),
+});
+```
+
+## Valibot example
+
+```ts
+import { ApiClient } from "bytekit";
+import { valibotAdapter } from "bytekit/schema-adapter";
+import { object, string, number, parse } from "valibot";
+
+const UserSchema = object({
+  id: number(),
+  name: string(),
+});
+
+const api = new ApiClient({ baseUrl: "https://api.example.com" });
+
+const user = await api.get("/users/1", {
+  validateResponse: valibotAdapter(UserSchema, parse),
+});
+```

@@ -1,0 +1,31 @@
+---
+title: "PollingHelper"
+description: "Class reference and examples for PollingHelper."
+---
+
+## Import
+
+```ts
+import { PollingHelper } from "bytekit/polling-helper";
+```
+
+## Main methods
+
+- `start()`
+- `startWithAbort()`
+- `abort()`
+
+## Example
+
+```ts
+const poller = new PollingHelper(
+  () => fetchJobStatus(),
+  {
+    interval: 5000,
+    maxAttempts: 20,
+    stopCondition: (result) => result.status === "done",
+  }
+);
+
+const result = await poller.start();
+```

@@ -1,0 +1,26 @@
+---
+title: "CryptoUtils"
+description: "Reference and examples for CryptoUtils."
+---
+
+## Import
+
+```ts
+import { CryptoUtils } from "bytekit/crypto-utils";
+```
+
+## Common tasks
+
+- `generateToken(length?)`
+- `generateUUID()`
+- `hash(str, algorithm?)`
+- `hmac(message, secret, algorithm?)`
+- `verifyHash(str, hash, algorithm?)`
+
+## Example
+
+```ts
+const token = CryptoUtils.generateToken(32);
+const uuid = CryptoUtils.generateUUID();
+const hash = await CryptoUtils.hash("payload");
+```

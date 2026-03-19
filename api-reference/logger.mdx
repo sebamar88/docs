@@ -1,0 +1,31 @@
+---
+title: "Logger"
+description: "Class reference and examples for Logger."
+---
+
+## Import
+
+```ts
+import { Logger } from "bytekit/logger";
+import { createLogger } from "bytekit";
+```
+
+## Example
+
+```ts
+const logger = createLogger({
+  namespace: "billing",
+  level: "debug",
+});
+
+logger.info("Creating invoice", { id: "inv_123" });
+```
+
+## Main methods
+
+- `debug(message, context?)`
+- `info(message, context?)`
+- `warn(message, context?)`
+- `error(message, context?, error?)`
+- `setLevel(level)`
+- `child(namespace)`

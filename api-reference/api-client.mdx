@@ -1,0 +1,79 @@
+---
+title: "ApiClient"
+description: "Class reference and examples for ApiClient."
+---
+
+## Import
+
+```ts
+import { ApiClient } from "bytekit/api-client";
+```
+
+## What it does
+
+`ApiClient` is the main request abstraction in ByteKit. It wraps `fetch` with timeouts, interceptors, retries, circuit breaker support, localized errors, and optional response validation.
+
+## Common constructor options
+
+- `baseUrl` or `baseURL`
+- `defaultHeaders`
+- `timeoutMs`
+- `interceptors`
+- `logger`
+- `retryPolicy`
+- `circuitBreaker`
+- `locale`
+
+## Typical setup
+
+```ts
+const api = new ApiClient({
+  baseUrl: "https://api.example.com",
+  timeoutMs: 10_000,
+  defaultHeaders: {
+    Authorization: `Bearer ${token}`,
+  },
+});
+```
+
+## Common methods
+
+- `get(path, options?)`
+- `post(path, bodyOrOptions?)`
+- `put(path, bodyOrOptions?)`
+- `patch(path, bodyOrOptions?)`
+- `delete(path, options?)`
+- `getList(path, options?)`
+
+## Example: typed GET
+
+```ts
+type User = { id: number; name: string };
+
+const users = await api.get<User[]>("/users");
+```
+
+## Example: POST with payload
+
+```ts
+const created = await api.post<{ id: string }>("/users", {
+  name: "Ada Lovelace",
+});
+```
+
+## Example: interceptors
+
+```ts
+const api = new ApiClient({
+  baseUrl: "https://api.example.com",
+  interceptors: {
+    request: async (url, init) => {
+      const headers = new Headers(init.headers);
+      headers.set("X-Trace-Id", crypto.randomUUID());
+      return [url, { ...init, headers }];
+    },
+  },
+});
+```
+
+See also [HTTP client](/api-reference/http-client), [ResponseValidator](/api-reference/response-validator), and [Schema adapters](/api-reference/schema-adapters).

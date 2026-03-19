@@ -1,0 +1,28 @@
+---
+title: "CacheManager"
+description: "Class reference and examples for CacheManager."
+---
+
+## Import
+
+```ts
+import { CacheManager } from "bytekit/cache-manager";
+```
+
+## Common options
+
+- `defaultTTL`
+- `maxMemorySize`
+- `enableLocalStorage`
+
+## Example
+
+```ts
+const cache = new CacheManager({
+  defaultTTL: 60_000,
+  maxMemorySize: 100,
+  enableLocalStorage: true,
+});
+
+const stats = await cache.getOrCompute("dashboard-stats", loadStats);
+```

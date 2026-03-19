@@ -1,0 +1,29 @@
+---
+title: "WebSocketHelper"
+description: "Class reference and examples for WebSocketHelper."
+---
+
+## Import
+
+```ts
+import { WebSocketHelper } from "bytekit/websocket";
+```
+
+## Main methods
+
+- `connect()`
+- `send(type, data)`
+- `on(type, handler)`
+- `onError(handler)`
+- `request(type, data, responseType?)`
+- `close()`
+- `isConnected()`
+- `getState()`
+
+## Example
+
+```ts
+const socket = new WebSocketHelper("wss://example.com/socket");
+await socket.connect();
+socket.on("price:update", (payload) => console.log(payload));
+```

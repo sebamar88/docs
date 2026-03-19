@@ -19,21 +19,13 @@ This page is for contributors who edit the ByteKit docs site itself.
 
 ## Run the docs site locally
 
-From the root of this docs repo:
-
-```bash
-mint dev
-```
+Start the local preview from the root of this docs repo and open the local docs URL in your browser.
 
 The site usually runs at `http://localhost:3000`.
 
 ## Validate before you publish
 
-Run a broken-link check after moving pages, renaming slugs, or editing navigation.
-
-```bash
-mint broken-links
-```
+Run the broken-link validation step after moving pages, renaming slugs, or editing navigation.
 
 ## Keep docs aligned with the package
 
@@ -82,4 +74,4 @@ This site should reflect the real ByteKit package surface. When you update conte
 - The page speaks directly about ByteKit.
 - Code samples match current public exports.
 - Navigation stays in sync with the content.
-- `mint broken-links` passes before commit.
+- Link validation passes before commit.

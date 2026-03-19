@@ -1,0 +1,42 @@
+---
+title: "ErrorBoundary"
+description: "Reference for ErrorBoundary and ByteKit error types."
+---
+
+## Import
+
+```ts
+import { ErrorBoundary, AppError } from "bytekit/error-boundary";
+```
+
+## Main exports
+
+- `ErrorBoundary`
+- `AppError`
+- `AppValidationError`
+- `NotFoundError`
+- `UnauthorizedError`
+- `ForbiddenError`
+- `ConflictError`
+- `RateLimitError`
+- `TimeoutError`
+
+## Example
+
+```ts
+const boundary = new ErrorBoundary({
+  maxRetries: 2,
+  retryDelay: 500,
+});
+
+const data = await boundary.execute(
+  () => fetchProfile(),
+  { context: "profile-load" }
+);
+```
+
+## Main methods
+
+- `handle(error, context?)`
+- `execute(fn, context?)`
+- `executeSync(fn, context?)`

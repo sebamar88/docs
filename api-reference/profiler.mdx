@@ -1,0 +1,28 @@
+---
+title: "Profiler"
+description: "Class reference and examples for Profiler."
+---
+
+## Import
+
+```ts
+import { Profiler } from "bytekit/profiler";
+```
+
+## Example
+
+```ts
+const profiler = new Profiler("checkout");
+
+profiler.start("create-payment");
+await createPayment();
+profiler.end("create-payment");
+
+console.log(profiler.summary());
+```
+
+## Main methods
+
+- `start(label)`
+- `end(label)`
+- `summary()`
