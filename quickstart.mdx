@@ -3,6 +3,16 @@ title: "Quickstart"
 description: "Install bytekit and make your first typed request."
 ---
 
+## What you get
+
+`bytekit` is most useful when you need more than a raw `fetch` wrapper.
+
+- A reusable `ApiClient` with typed request helpers
+- Response validation through schema adapters
+- Retry and circuit breaker primitives
+- A focused `bytekit/async` toolkit for concurrency and timing control
+- Helper modules for streaming, storage, logging, caching, and more
+
 ## Install the package
 
 ```bash
@@ -17,6 +27,21 @@ pnpm add bytekit
 yarn add bytekit
 ```
 
+## Pick an import style
+
+Use the package root for convenience:
+
+```ts
+import { ApiClient, zodAdapter } from "bytekit";
+```
+
+Use focused entrypoints for clearer boundaries:
+
+```ts
+import { ApiClient } from "bytekit/api-client";
+import { retry, parallel } from "bytekit/async";
+```
+
 ## Make your first request
 
 ```ts
@@ -28,6 +53,18 @@ const api = new ApiClient({
 
 const users = await api.get("/users");
 console.log(users);
+```
+
+## Type your response
+
+```ts
+type User = {
+  id: number;
+  name: string;
+  email: string;
+};
+
+const users = await api.get<User[]>("/users");
 ```
 
 ## Add response validation
@@ -51,6 +88,27 @@ const api = new ApiClient({
 const user = await api.get("/users/1", {
   validateResponse: zodAdapter(UserSchema),
 });
+```
+
+## Handle failures explicitly
+
+```ts
+import { ApiClient, ApiError } from "bytekit";
+
+const api = new ApiClient({
+  baseUrl: "https://api.example.com",
+  locale: "en",
+});
+
+try {
+  await api.get("/users/999");
+} catch (error) {
+  if (error instanceof ApiError) {
+    console.error(error.status);
+    console.error(error.message);
+    console.error(error.body);
+  }
+}
 ```
 
 ## Turn on resilience
@@ -84,6 +142,45 @@ const result = await retry(fetchData, {
 
 const responses = await parallel(tasks, {
   concurrency: 3,
+});
+```
+
+## Common next steps
+
+<CardGroup cols={2}>
+  <Card title="Learn the client model" icon="globe" href="/guides/http-client">
+    Move from raw requests to reusable request architecture.
+  </Card>
+  <Card title="Add production resilience" icon="shield" href="/guides/resilience">
+    Combine retries, rate limiting, caching, and request deduplication.
+  </Card>
+  <Card title="Control async workflows" icon="bolt" href="/guides/async-toolkit">
+    Handle concurrency, retries, timeout, and debounce patterns.
+  </Card>
+  <Card title="Review exports" icon="book" href="/reference/overview">
+    See what the package exposes before you standardize imports.
+  </Card>
+</CardGroup>
+
+## Minimal production template
+
+```ts
+import { ApiClient, createLogger } from "bytekit";
+
+const logger = createLogger({ namespace: "app-api" });
+
+export const api = new ApiClient({
+  baseUrl: process.env.API_URL ?? "http://localhost:3000/api",
+  timeoutMs: 10_000,
+  logger,
+  retryPolicy: {
+    maxAttempts: 3,
+    initialDelayMs: 200,
+  },
+  circuitBreaker: {
+    failureThreshold: 5,
+    timeoutMs: 30_000,
+  },
 });
 ```
 

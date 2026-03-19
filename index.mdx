@@ -3,6 +3,10 @@ title: "Introduction"
 description: "bytekit is a lean TypeScript toolkit for resilient HTTP workflows and async control."
 ---
 
+<Info>
+  `bytekit` is designed for teams that want a typed HTTP layer, async control primitives, and production helpers without stacking several small runtime libraries.
+</Info>
+
 ## Build reliable networked apps with fewer dependencies
 
 `bytekit` gives you a typed HTTP client, async primitives, and production-focused helpers in one package.
@@ -30,6 +34,78 @@ description: "bytekit is a lean TypeScript toolkit for resilient HTTP workflows 
 - Deep-zero runtime dependencies
 - Modular exports so you can import only what you need
 
+## What you can build with it
+
+<CardGroup cols={2}>
+  <Card title="Typed API layer" icon="globe" href="/guides/http-client">
+    Centralize headers, validation, timeouts, and request policies in one client.
+  </Card>
+  <Card title="Failure-tolerant integrations" icon="shield-halved" href="/guides/resilience">
+    Add retries, circuit breaker behavior, rate limiting, and cache-aware patterns.
+  </Card>
+  <Card title="Heavy async workflows" icon="bolt" href="/guides/async-toolkit">
+    Coordinate concurrency, backoff, timeouts, and cancellation-friendly flows.
+  </Card>
+  <Card title="Realtime and streaming flows" icon="waves" href="/guides/streaming-and-realtime">
+    Consume NDJSON streams, SSE endpoints, and streamed downloads.
+  </Card>
+</CardGroup>
+
+## Core modules at a glance
+
+| Area | What it covers | Start here |
+| --- | --- | --- |
+| HTTP | `ApiClient`, request config, typed responses, schema validation | `/guides/http-client` |
+| Resilience | `RetryPolicy`, `RateLimiter`, `RequestCache`, `RequestDeduplicator` | `/guides/resilience` |
+| Async | `retry`, `parallel`, `sequential`, `race`, `timeout`, `sleep` | `/guides/async-toolkit` |
+| Observability | `Logger`, `Profiler`, debug helpers | `/reference/overview` |
+| Helpers | Streaming, WebSocket, crypto, storage, cache, env helpers | `/reference/overview` |
+
+## Typical starting point
+
+<Steps>
+  <Step title="Create one shared client">
+    Put `ApiClient` behind a small app-specific wrapper so your base URL, auth headers, timeout policy, and interceptors live in one place.
+  </Step>
+  <Step title="Validate risky boundaries">
+    Use `zodAdapter` or `valibotAdapter` on requests where a malformed backend response would break your UI or job.
+  </Step>
+  <Step title="Add resilience where failures are expensive">
+    Turn on retries, circuit breaking, and rate limiting for external APIs or unstable internal services.
+  </Step>
+  <Step title="Pull in narrow entrypoints">
+    Import from `bytekit/api-client`, `bytekit/async`, or `bytekit/logger` when you want smaller and clearer module boundaries.
+  </Step>
+</Steps>
+
+## Example setup
+
+```ts
+import { ApiClient, createLogger, zodAdapter } from "bytekit";
+import { z } from "zod";
+
+const logger = createLogger({ namespace: "billing-api" });
+
+const InvoiceSchema = z.object({
+  id: z.string(),
+  status: z.enum(["draft", "paid", "void"]),
+});
+
+const api = new ApiClient({
+  baseUrl: "https://api.example.com",
+  timeoutMs: 10_000,
+  logger,
+  retryPolicy: {
+    maxAttempts: 3,
+    initialDelayMs: 200,
+  },
+});
+
+const invoice = await api.get("/invoices/123", {
+  validateResponse: zodAdapter(InvoiceSchema),
+});
+```
+
 ## Start with the right guide
 
 <CardGroup cols={2}>
@@ -46,3 +122,14 @@ description: "bytekit is a lean TypeScript toolkit for resilient HTTP workflows 
     See the public module entrypoints exposed by the package.
   </Card>
 </CardGroup>
+
+## Choose the right import surface
+
+- Use `bytekit` if you want convenience and a single import surface.
+- Use `bytekit/api-client` when you only need HTTP features.
+- Use `bytekit/async` when you only need flow-control utilities.
+- Use focused helper entrypoints when you want explicit boundaries in a larger codebase.
+
+<Tip>
+  If you are evaluating the library, read [Quickstart](/quickstart), then [HTTP client](/guides/http-client), and then [Reference overview](/reference/overview).
+</Tip>

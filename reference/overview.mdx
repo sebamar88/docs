@@ -3,45 +3,61 @@ title: "Overview"
 description: "High-level package reference for bytekit modules."
 ---
 
+## Package shape
+
+`bytekit` is organized as a small set of public entrypoints. Each one maps to a focused area of responsibility.
+
 ## Core entrypoints
 
 `bytekit` exposes a small set of focused entrypoints instead of one large monolith.
 
 ### Networking and resilience
 
-- `bytekit`
-- `bytekit/api-client`
-- `bytekit/retry-policy`
-- `bytekit/response-validator`
-- `bytekit/request-cache`
-- `bytekit/request-deduplicator`
-- `bytekit/rate-limiter`
-- `bytekit/error-boundary`
-- `bytekit/schema-adapter`
+- `bytekit`: convenience root export for the main modules
+- `bytekit/api-client`: `ApiClient`, `ApiError`, request types, list helpers
+- `bytekit/retry-policy`: `RetryPolicy` and `CircuitBreaker`
+- `bytekit/response-validator`: built-in validation utilities
+- `bytekit/request-cache`: in-memory request cache primitives
+- `bytekit/request-deduplicator`: deduplicate in-flight requests
+- `bytekit/rate-limiter`: token bucket and sliding-window rate limiting
+- `bytekit/error-boundary`: normalize and isolate errors
+- `bytekit/schema-adapter`: schema adapter helpers like `zodAdapter` and `valibotAdapter`
 
 ### Async toolkit
 
-- `bytekit/async`
+- `bytekit/async`: `retry`, `parallel`, `sequential`, `race`, `allSettled`, `timeout`, `sleep`, `debounceAsync`, `throttleAsync`
 
 ### Observability
 
-- `bytekit/logger`
-- `bytekit/profiler`
-- `bytekit/debug`
+- `bytekit/logger`: structured logs and logger factory helpers
+- `bytekit/profiler`: execution timing and performance measurement
+- `bytekit/debug`: debug helpers for development diagnostics
 
 ### Helpers
 
-- `bytekit/env-manager`
-- `bytekit/storage-utils`
-- `bytekit/file-upload`
-- `bytekit/streaming`
-- `bytekit/websocket`
-- `bytekit/cache-manager`
-- `bytekit/compression-utils`
-- `bytekit/crypto-utils`
-- `bytekit/diff-utils`
-- `bytekit/event-emitter`
-- `bytekit/polling-helper`
+- `bytekit/env-manager`: environment-aware value lookup
+- `bytekit/storage-utils`: storage access helpers
+- `bytekit/file-upload`: multipart and upload helpers
+- `bytekit/streaming`: NDJSON, SSE, and streaming downloads
+- `bytekit/websocket`: typed WebSocket helper utilities
+- `bytekit/cache-manager`: broader cache strategies beyond request caching
+- `bytekit/compression-utils`: compression and decompression helpers
+- `bytekit/crypto-utils`: hashes, HMAC, UUIDs, and secure comparisons
+- `bytekit/diff-utils`: object and array diffing
+- `bytekit/event-emitter`: event bus primitives
+- `bytekit/polling-helper`: polling with configurable intervals and control
+
+## Choose by use case
+
+| If you need to... | Use |
+| --- | --- |
+| Call REST endpoints with typed helpers | `ApiClient` |
+| Retry flaky async code outside HTTP | `bytekit/async` `retry` |
+| Protect an unstable integration | `RetryPolicy`, `CircuitBreaker`, `RateLimiter` |
+| Avoid duplicate in-flight calls | `RequestDeduplicator` |
+| Cache request results locally | `RequestCache` or `CacheManager` |
+| Consume event streams or NDJSON | `StreamingHelper` |
+| Standardize logs across modules | `Logger` or `createLogger` |
 
 ## Recommended import style
 
@@ -54,3 +70,117 @@ import { Logger } from "bytekit/logger";
 ```
 
 If you prefer a single import surface, `bytekit` also re-exports the main modules.
+
+## Good defaults
+
+- Prefer `bytekit/api-client` and `bytekit/async` in application code when you want explicit module boundaries.
+- Prefer the root `bytekit` export in quick prototypes or small services.
+- Keep user-facing docs and examples on public package exports only.
+
+<Tip>
+  Continue with [Import paths](/reference/import-paths) for the exact public export map you can rely on.
+</Tip>
+
+*** Add File: /home/sebamar88/Escritorio/Development/bytekit-docs/guides/common-recipes.mdx
+---
+title: "Common recipes"
+description: "Practical bytekit patterns you can adapt quickly."
+---
+
+## Authenticated API client
+
+```ts
+import { ApiClient } from "bytekit/api-client";
+
+export function createApiClient(token: string) {
+  return new ApiClient({
+    baseUrl: "https://api.example.com",
+    defaultHeaders: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+}
+```
+
+## Deduplicate concurrent reads
+
+```ts
+import { ApiClient, RequestDeduplicator } from "bytekit";
+
+const api = new ApiClient({ baseUrl: "https://api.example.com" });
+const deduplicator = new RequestDeduplicator();
+
+export function getCurrentUser() {
+  return deduplicator.execute("/me", () => api.get("/me"));
+}
+```
+
+## Wrap a slow operation with timeout
+
+```ts
+import { withTimeout } from "bytekit/async";
+
+const fetchReport = withTimeout(async (id: string) => {
+  const response = await fetch(`/api/reports/${id}`);
+  return response.json();
+}, 5000);
+```
+
+## Rate-limit outbound requests
+
+```ts
+import { ApiClient, RateLimiter } from "bytekit";
+
+const limiter = new RateLimiter({
+  maxRequests: 20,
+  windowMs: 60_000,
+});
+
+const api = new ApiClient({
+  baseUrl: "https://api.example.com",
+  interceptors: {
+    request: async (url, init) => {
+      await limiter.waitForAllowance(url);
+      return [url, init];
+    },
+  },
+});
+```
+
+## Validate API responses at the edge
+
+```ts
+import { ApiClient, zodAdapter } from "bytekit";
+import { z } from "zod";
+
+const ProjectSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+});
+
+const api = new ApiClient({
+  baseUrl: "https://api.example.com",
+});
+
+export async function getProject(id: string) {
+  return api.get(`/projects/${id}`, {
+    validateResponse: zodAdapter(ProjectSchema),
+  });
+}
+```
+
+## Stream NDJSON data
+
+```ts
+import { StreamingHelper } from "bytekit";
+
+await StreamingHelper.streamJsonLines("https://api.example.com/logs", {
+  onChunk: (line) => {
+    console.log("received", line);
+  },
+});
+```
+
+<Note>
+  These recipes are intentionally small. For fuller context, continue into the linked guides for HTTP, resilience, async control, and streaming.
+</Note>

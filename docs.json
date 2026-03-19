@@ -26,6 +26,7 @@
             "pages": [
               "guides/http-client",
               "guides/async-toolkit",
+              "guides/common-recipes",
               "guides/resilience",
               "guides/streaming-and-realtime"
             ]
