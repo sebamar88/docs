@@ -1,0 +1,60 @@
+---
+title: "Import paths"
+description: "Public import paths exposed by the package exports map."
+---
+
+## Package root
+
+```ts
+import {
+  ApiClient,
+  createLogger,
+  EnvManager,
+  StreamingHelper,
+  zodAdapter,
+} from "bytekit";
+```
+
+## Focused entrypoints
+
+```ts
+import { ApiClient } from "bytekit/api-client";
+import { RetryPolicy } from "bytekit/retry-policy";
+import { parallel, debounceAsync, timeout } from "bytekit/async";
+import { Logger } from "bytekit/logger";
+import { Profiler } from "bytekit/profiler";
+import { EnvManager } from "bytekit/env-manager";
+import { StreamingHelper } from "bytekit/streaming";
+import { WebSocketHelper } from "bytekit/websocket";
+```
+
+## Available public exports
+
+- `bytekit`
+- `bytekit/api-client`
+- `bytekit/retry-policy`
+- `bytekit/response-validator`
+- `bytekit/schema-adapter`
+- `bytekit/async`
+- `bytekit/logger`
+- `bytekit/profiler`
+- `bytekit/debug`
+- `bytekit/env-manager`
+- `bytekit/storage-utils`
+- `bytekit/file-upload`
+- `bytekit/streaming`
+- `bytekit/websocket`
+- `bytekit/cache-manager`
+- `bytekit/compression-utils`
+- `bytekit/crypto-utils`
+- `bytekit/diff-utils`
+- `bytekit/event-emitter`
+- `bytekit/polling-helper`
+- `bytekit/request-cache`
+- `bytekit/rate-limiter`
+- `bytekit/request-deduplicator`
+- `bytekit/error-boundary`
+
+<Warning>
+  Document only public import paths from the package `exports` map. Avoid referencing internal `src/` paths in user-facing docs.
+</Warning>

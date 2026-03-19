@@ -1,0 +1,105 @@
+---
+title: "HTTP client"
+description: "Use ApiClient for typed, isomorphic HTTP requests."
+---
+
+## Create a client
+
+`ApiClient` works in Node.js 18+ and modern browsers because it relies on native `fetch`.
+
+```ts
+import { ApiClient } from "bytekit/api-client";
+
+const api = new ApiClient({
+  baseUrl: "https://api.example.com",
+  timeoutMs: 10000,
+  defaultHeaders: {
+    Authorization: `Bearer ${token}`,
+  },
+});
+```
+
+## Send typed requests
+
+```ts
+interface User {
+  id: number;
+  name: string;
+  email: string;
+}
+
+const users = await api.get<User[]>("/users");
+
+const created = await api.post<User>("/users", {
+  name: "Ada Lovelace",
+  email: "ada@example.com",
+});
+```
+
+## Add query parameters
+
+```ts
+const results = await api.get("/users", {
+  searchParams: {
+    page: 1,
+    limit: 20,
+    status: "active",
+  },
+});
+```
+
+## Validate responses
+
+`bytekit` exposes adapter helpers so you can keep schema validation close to your requests.
+
+```ts
+import { ApiClient, zodAdapter } from "bytekit";
+import { z } from "zod";
+
+const UserSchema = z.object({
+  id: z.number(),
+  name: z.string(),
+});
+
+const user = await api.get("/users/1", {
+  validateResponse: zodAdapter(UserSchema),
+});
+```
+
+## Use interceptors
+
+Interceptors let you adjust every request or response in one place.
+
+```ts
+const api = new ApiClient({
+  baseUrl: "https://api.example.com",
+  interceptors: {
+    request: async (url, init) => {
+      return [
+        `${url}${url.includes("?") ? "&" : "?"}t=${Date.now()}`,
+        init,
+      ];
+    },
+    response: async (response) => {
+      console.log("status", response.status);
+      return response;
+    },
+  },
+});
+```
+
+## Configure environment-aware URLs
+
+```ts
+import { ApiClient, EnvManager } from "bytekit";
+
+const env = new EnvManager();
+
+const api = new ApiClient({
+  baseUrl: env.get("API_URL") || "http://localhost:3000/api",
+});
+```
+
+<Tip>
+  Move to [resilience patterns](/guides/resilience) if you need retries, caching, deduplication, or rate limiting.
+</Tip>

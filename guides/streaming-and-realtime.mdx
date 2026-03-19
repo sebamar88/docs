@@ -1,0 +1,80 @@
+---
+title: "Streaming and realtime"
+description: "Process NDJSON, server-sent events, and streamed downloads."
+---
+
+## Stream JSON Lines
+
+Use `StreamingHelper.streamJsonLines` when a dataset is too large to load all at once.
+
+```ts
+import { StreamingHelper } from "bytekit";
+
+interface LogEntry {
+  id: string;
+  level: "info" | "error";
+  message: string;
+  timestamp: string;
+}
+
+const result = await StreamingHelper.streamJsonLines<LogEntry>(
+  "https://api.example.com/logs/stream",
+  {
+    timeout: 60_000,
+    onChunk: (chunk) => {
+      console.log("received", chunk.id);
+    },
+    onComplete: () => {
+      console.log("stream finished");
+    },
+  }
+);
+```
+
+## Subscribe to server-sent events
+
+```ts
+import { StreamingHelper } from "bytekit";
+
+interface PriceUpdate {
+  symbol: string;
+  price: number;
+}
+
+const stream = StreamingHelper.streamSSE<PriceUpdate>(
+  "https://api.example.com/prices",
+  {
+    onError: (error) => console.error(error),
+    onComplete: () => console.log("connection closed"),
+  }
+);
+
+const unsubscribe = stream.subscribe((data) => {
+  console.log(`${data.symbol}: ${data.price}`);
+});
+
+// unsubscribe();
+// stream.close();
+```
+
+## Track streamed downloads
+
+```ts
+import { StreamingHelper } from "bytekit";
+
+const blob = await StreamingHelper.downloadStream(
+  "https://example.com/large-file.zip",
+  {
+    onProgress: (percent) => {
+      console.log(`progress: ${percent}%`);
+    },
+  }
+);
+```
+
+## Best practices
+
+- Set explicit timeouts for long-lived streams.
+- Release subscriptions when your component unmounts.
+- Process chunks incrementally if the dataset is large.
+- Keep error handling close to reconnection or recovery logic.

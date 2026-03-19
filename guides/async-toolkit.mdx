@@ -1,0 +1,76 @@
+---
+title: "Async toolkit"
+description: "Control concurrency, retries, cancellation, and timing with bytekit/async."
+---
+
+## What `bytekit/async` includes
+
+- `retry` for transient failures
+- `parallel` for bounded concurrency
+- `race` and `allSettled` for coordinated execution
+- `sleep` and `timeout` for timing control
+- `debounceAsync` and `throttleAsync` for UI and event-heavy flows
+
+## Retry unstable operations
+
+```ts
+import { retry } from "bytekit/async";
+
+const data = await retry(fetchData, {
+  maxAttempts: 5,
+  initialDelayMs: 500,
+  backoff: "exponential",
+});
+```
+
+## Limit concurrency with `parallel`
+
+```ts
+import { parallel } from "bytekit/async";
+
+const uploads = files.map((file) => () => uploadFile(file));
+
+const results = await parallel(uploads, {
+  concurrency: 5,
+});
+```
+
+## Debounce async search
+
+```ts
+import { debounceAsync } from "bytekit/async";
+
+const search = debounceAsync(async (query: string) => {
+  const response = await fetch(`/api/search?q=${query}`);
+  return response.json();
+}, 300);
+```
+
+## Add timeouts to long-running work
+
+```ts
+import { timeout } from "bytekit/async";
+
+const result = await timeout(
+  fetch("https://api.example.com/report"),
+  5000
+);
+```
+
+## Race multiple sources
+
+```ts
+import { race, sleep } from "bytekit/async";
+
+const result = await race([
+  fetchFromPrimaryRegion(),
+  fetchFromSecondaryRegion(),
+  sleep(5000).then(() => {
+    throw new Error("Timed out");
+  }),
+]);
+```
+
+<Note>
+  Use `bytekit/async` when you want these utilities without pulling in the rest of the package surface.
+</Note>

@@ -1,0 +1,56 @@
+---
+title: "Overview"
+description: "High-level package reference for bytekit modules."
+---
+
+## Core entrypoints
+
+`bytekit` exposes a small set of focused entrypoints instead of one large monolith.
+
+### Networking and resilience
+
+- `bytekit`
+- `bytekit/api-client`
+- `bytekit/retry-policy`
+- `bytekit/response-validator`
+- `bytekit/request-cache`
+- `bytekit/request-deduplicator`
+- `bytekit/rate-limiter`
+- `bytekit/error-boundary`
+- `bytekit/schema-adapter`
+
+### Async toolkit
+
+- `bytekit/async`
+
+### Observability
+
+- `bytekit/logger`
+- `bytekit/profiler`
+- `bytekit/debug`
+
+### Helpers
+
+- `bytekit/env-manager`
+- `bytekit/storage-utils`
+- `bytekit/file-upload`
+- `bytekit/streaming`
+- `bytekit/websocket`
+- `bytekit/cache-manager`
+- `bytekit/compression-utils`
+- `bytekit/crypto-utils`
+- `bytekit/diff-utils`
+- `bytekit/event-emitter`
+- `bytekit/polling-helper`
+
+## Recommended import style
+
+Use the narrowest public entrypoint that matches your use case.
+
+```ts
+import { ApiClient } from "bytekit/api-client";
+import { retry, parallel } from "bytekit/async";
+import { Logger } from "bytekit/logger";
+```
+
+If you prefer a single import surface, `bytekit` also re-exports the main modules.
