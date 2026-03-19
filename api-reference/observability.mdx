@@ -1,0 +1,60 @@
+---
+title: "Observability"
+description: "Reference for logging, profiling, and debug helpers."
+---
+
+## Module entrypoints
+
+- `bytekit/logger`
+- `bytekit/profiler`
+- `bytekit/debug`
+
+## `Logger`
+
+Structured logger for browser and Node.js environments.
+
+### Constructor options
+
+| Option | Purpose |
+| --- | --- |
+| `namespace` | Prefix logs by module or concern |
+| `level` | Minimum log level |
+| `transports` | Custom transports |
+| `includeTimestamp` | Toggle timestamps |
+
+### Main instance methods
+
+- `debug(message, context?)`
+- `info(message, context?)`
+- `warn(message, context?)`
+- `error(message, context?, error?)`
+- `log(level, message, context?, error?)`
+- `setLevel(level)`
+- `child(namespace)`
+
+### Factory helpers
+
+- `createLogger(options?)`
+- `Logger.silent()`
+- `consoleTransportNode()`
+- `consoleTransportBrowser()`
+
+## `Profiler`
+
+Use this module to measure execution time around async or sync work.
+
+Typical use cases:
+
+- Compare competing implementations
+- Instrument slow workflows
+- Collect app-level timing checkpoints
+
+## `debug`
+
+This entrypoint groups development-oriented debugging helpers.
+
+Use it when:
+
+- You want diagnostics without wiring a full logger pipeline
+- You need temporary development visibility
+- You want to keep debug helpers out of higher-level business modules

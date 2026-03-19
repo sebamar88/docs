@@ -1,45 +1,83 @@
 ---
 title: "Development"
-description: "Preview and validate the Mintlify site locally."
+description: "Work on the ByteKit documentation site locally and keep content aligned with the package."
 ---
+
+## What this page covers
+
+This page is for contributors who edit the ByteKit docs site itself.
+
+- Use it when you add or rewrite docs pages.
+- Use it when you change navigation in `docs.json`.
+- Use it when package exports or examples change in the main `bytekit` repo.
 
 ## Prerequisites
 
 - Node.js 18 or newer
-- A global or local `mint` CLI installation
+- The Mintlify CLI available as `mint`
+- Access to the `bytekit` package repo when you need to verify exports or examples
 
-## Run the docs locally
+## Run the docs site locally
+
+From the root of this docs repo:
 
 ```bash
-npm i -g mint
 mint dev
 ```
 
-Mintlify serves the site locally, usually at `http://localhost:3000`.
+The site usually runs at `http://localhost:3000`.
 
-## Check for broken links
+## Validate before you publish
+
+Run a broken-link check after moving pages, renaming slugs, or editing navigation.
 
 ```bash
 mint broken-links
 ```
 
-Run this before you open a pull request or publish a larger docs change.
+## Keep docs aligned with the package
 
-## Update site configuration
+This site documents ByteKit, not Mintlify itself. When you update content:
 
-Most project-level configuration lives in `docs.json`.
+- Verify import paths against the package `exports` map.
+- Prefer examples that match the actual public API.
+- Remove or rewrite starter content that refers to generic Mintlify demos.
+- Keep the landing page and reference pages aligned with the package surface area.
 
-- Update the site name, colors, navbar links, and footer links there.
-- Keep page slugs aligned with the `navigation` entries.
-- Prefer moving or renaming pages together with their `href` references.
+## Where to edit common things
 
-## Writing guidance for this repo
+- Edit `docs.json` for navigation, navbar links, footer links, and global anchors.
+- Edit `index.mdx` for the product landing page.
+- Edit `quickstart.mdx` for the first-run developer path.
+- Edit files in `guides/` for topic-driven documentation.
+- Edit files in `reference/` for import paths, modules, and package structure.
 
-- Use active voice and second person.
-- Keep sentences short.
-- Use bold text for UI labels.
-- Use code formatting for commands, paths, import paths, and identifiers.
+## Content standards for ByteKit docs
 
-## Project note
+- Lead with the developer task, not the implementation detail.
+- Use code examples that can plausibly be copied into a real app.
+- Prefer focused examples over placeholder demos.
+- Use code formatting for package names, commands, paths, imports, and identifiers.
+- Keep terminology consistent across guides and reference pages.
 
-The current `AGENTS.md` still contains placeholder guidance. Customize it with bytekit-specific terminology and content boundaries so future doc edits stay consistent.
+## Recommended update workflow
+
+<Steps>
+  <Step title="Confirm the package API">
+    Check the `bytekit` repo before documenting modules, options, or import paths.
+  </Step>
+  <Step title="Edit the relevant page">
+    Keep the page scoped to one job: getting started, a guide, or package reference.
+  </Step>
+  <Step title="Update navigation if needed">
+    If you add or rename a page, keep `docs.json` in sync.
+  </Step>
+  <Step title="Run link validation">
+    Use `mint broken-links` before you commit.
+  </Step>
+</Steps>
+
+## Current cleanup still worth doing
+
+- Rewrite `README.md` so it no longer presents this repo as the Mintlify starter kit.
+- Customize `AGENTS.md` with bytekit-specific terminology and content boundaries.

@@ -1,0 +1,54 @@
+---
+title: "Overview"
+description: "Detailed API reference map for ByteKit public modules."
+---
+
+## What this tab covers
+
+This tab breaks down the public ByteKit API by module family.
+
+- Core HTTP and request types
+- Resilience and request control primitives
+- Async utilities
+- Observability modules
+- Helper modules exposed through focused entrypoints
+
+## Public entrypoints
+
+| Entrypoint | Purpose |
+| --- | --- |
+| `bytekit` | Root export for the main surface area |
+| `bytekit/api-client` | HTTP client, request helpers, `ApiError` |
+| `bytekit/retry-policy` | `RetryPolicy`, `CircuitBreaker` |
+| `bytekit/response-validator` | Built-in response validation |
+| `bytekit/schema-adapter` | `zodAdapter`, `valibotAdapter` |
+| `bytekit/async` | Retry, timing, concurrency, flow control |
+| `bytekit/logger` | Structured logging |
+| `bytekit/profiler` | Execution timing and performance measurement |
+| `bytekit/debug` | Development diagnostics |
+| `bytekit/request-cache` | Request result caching |
+| `bytekit/request-deduplicator` | In-flight request deduplication |
+| `bytekit/rate-limiter` | Token bucket and sliding window limiters |
+| `bytekit/error-boundary` | Error normalization and boundary utilities |
+| `bytekit/env-manager` | Environment variable access |
+| `bytekit/storage-utils` | Storage helpers |
+| `bytekit/file-upload` | Upload helpers |
+| `bytekit/streaming` | NDJSON, SSE, and streamed downloads |
+| `bytekit/websocket` | WebSocket helper utilities |
+| `bytekit/cache-manager` | Generic cache strategies |
+| `bytekit/compression-utils` | Compression helpers |
+| `bytekit/crypto-utils` | Hashing, tokens, UUIDs, comparisons |
+| `bytekit/diff-utils` | Object and array diffing |
+| `bytekit/event-emitter` | Event bus primitives |
+| `bytekit/polling-helper` | Polling workflows |
+
+## How to use this section
+
+- Start with [HTTP client](/api-reference/http-client) if your app centers around API requests.
+- Start with [Resilience](/api-reference/resilience) if you need retries, caching, or throttling.
+- Start with [Async](/api-reference/async) if you only need flow-control utilities.
+- Start with [Helpers](/api-reference/helpers) if you need the rest of the utility surface.
+
+<Note>
+  This section documents public package modules and the intended purpose of each export. It is not generated from TypeDoc, so examples stay editorial and task-focused.
+</Note>

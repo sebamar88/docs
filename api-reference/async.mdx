@@ -1,0 +1,81 @@
+---
+title: "Async"
+description: "Reference for ByteKit async utilities and flow-control helpers."
+---
+
+## Module entrypoint
+
+- `bytekit/async`
+
+## Timing
+
+| Export | Purpose |
+| --- | --- |
+| `sleep(ms, signal?)` | Delay execution with optional abort support |
+| `timeout(promise, ms, message?)` | Add a timeout to a promise |
+| `withTimeout(fn, ms, message?)` | Wrap a function with timeout behavior |
+
+## Retry and execution control
+
+| Export | Purpose |
+| --- | --- |
+| `retry(fn, options?)` | Retry a failed async operation |
+| `debounceAsync(fn, waitOrOptions)` | Debounce an async function |
+| `throttleAsync(fn, waitOrOptions)` | Throttle an async function |
+
+## Concurrency and coordination
+
+| Export | Purpose |
+| --- | --- |
+| `parallel(tasks, options?)` | Run tasks with optional concurrency limit |
+| `sequential(tasks, options?)` | Run tasks one after another |
+| `race(promises)` | Resolve with the first successful or settled candidate according to module semantics |
+| `allSettled(promises)` | Collect fulfilled and rejected results |
+
+## Error types
+
+The async module also exposes specialized error classes:
+
+- `TimeoutError`
+- `AbortError`
+- `RetryError`
+
+## Typical options
+
+### `retry`
+
+| Option | Purpose |
+| --- | --- |
+| `maxAttempts` | Maximum tries |
+| `baseDelay` | Starting delay |
+| `maxDelay` | Delay cap |
+| `backoff` | `linear`, `exponential`, or custom function |
+| `shouldRetry` | Predicate to keep retrying |
+| `signal` | Abort signal |
+
+### `parallel`
+
+| Option | Purpose |
+| --- | --- |
+| `concurrency` | Number of tasks allowed at once |
+
+### `sequential`
+
+| Option | Purpose |
+| --- | --- |
+| `continueOnError` | Keep executing after failures |
+
+## Example
+
+```ts
+import { parallel, retry, timeout } from "bytekit/async";
+
+const result = await retry(() => timeout(fetchData(), 5000), {
+  maxAttempts: 4,
+  baseDelay: 250,
+});
+
+const outputs = await parallel(jobs, {
+  concurrency: 3,
+});
+```

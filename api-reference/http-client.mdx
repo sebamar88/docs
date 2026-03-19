@@ -1,0 +1,102 @@
+---
+title: "HTTP client"
+description: "Reference for ApiClient, ApiError, request options, and schema adapters."
+---
+
+## Module entrypoints
+
+- `bytekit`
+- `bytekit/api-client`
+- `bytekit/schema-adapter`
+- `bytekit/response-validator`
+
+## `ApiClient`
+
+Primary class for isomorphic HTTP requests.
+
+### Constructor config
+
+| Option | Purpose |
+| --- | --- |
+| `baseUrl` or `baseURL` | Base URL for all requests |
+| `defaultHeaders` | Default headers for every request |
+| `fetchImpl` | Custom fetch implementation |
+| `locale` | Error message locale |
+| `errorMessages` | Per-locale status message overrides |
+| `timeoutMs` | Default request timeout |
+| `interceptors` | Request and response hooks |
+| `disableInterceptors` | Disable configured interceptors |
+| `logHeaders` | Include headers in logging |
+| `redactHeaderKeys` | Header keys to redact |
+| `logger` | Logger instance |
+| `retryPolicy` | Retry policy config |
+| `circuitBreaker` | Circuit breaker config |
+
+### Main methods
+
+| Method | Purpose |
+| --- | --- |
+| `get(path, options?)` | GET request |
+| `post(path, bodyOrOptions?)` | POST request |
+| `put(path, bodyOrOptions?)` | PUT request |
+| `patch(path, bodyOrOptions?)` | PATCH request |
+| `delete(path, options?)` | DELETE request |
+| `getList(path, options?)` | Paginated list requests with filters and sort |
+
+### Request options
+
+| Option | Purpose |
+| --- | --- |
+| `searchParams` | Query string parameters |
+| `body` | Request body |
+| `headers` | Per-request headers |
+| `errorLocale` | Override locale for one request |
+| `timeoutMs` | Per-request timeout override |
+| `validateResponse` | Built-in schema or adapter validation |
+| `skipRetry` | Skip retry policy for one call |
+| `skipInterceptors` | Skip interceptors for one call |
+
+## `ApiError`
+
+Error type raised for failed HTTP requests.
+
+Useful properties:
+
+- `status`
+- `statusText`
+- `message`
+- `body`
+- `isTimeout`
+- `details`
+
+## `zodAdapter` and `valibotAdapter`
+
+Use these when you want schema validation without tying your docs to internal validation logic.
+
+```ts
+import { ApiClient, zodAdapter } from "bytekit";
+import { z } from "zod";
+
+const UserSchema = z.object({
+  id: z.number(),
+  name: z.string(),
+});
+
+const api = new ApiClient({
+  baseUrl: "https://api.example.com",
+});
+
+const user = await api.get("/users/1", {
+  validateResponse: zodAdapter(UserSchema),
+});
+```
+
+## Built-in response validation
+
+If you prefer a framework-agnostic validation shape, use `bytekit/response-validator`.
+
+Use this path when:
+
+- You want lightweight structural checks
+- You do not want to depend on Zod or Valibot
+- You want docs that stay package-native

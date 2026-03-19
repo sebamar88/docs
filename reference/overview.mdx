@@ -1,15 +1,15 @@
 ---
 title: "Overview"
-description: "High-level package reference for bytekit modules."
+description: "High-level package reference for ByteKit modules."
 ---
 
 ## Package shape
 
-`bytekit` is organized as a small set of public entrypoints. Each one maps to a focused area of responsibility.
+ByteKit is organized as a small set of public entrypoints. Each one maps to a focused area of responsibility.
 
 ## Core entrypoints
 
-`bytekit` exposes a small set of focused entrypoints instead of one large monolith.
+ByteKit exposes a small set of focused entrypoints instead of one large monolith.
 
 ### Networking and resilience
 
@@ -80,107 +80,3 @@ If you prefer a single import surface, `bytekit` also re-exports the main module
 <Tip>
   Continue with [Import paths](/reference/import-paths) for the exact public export map you can rely on.
 </Tip>
-
-*** Add File: /home/sebamar88/Escritorio/Development/bytekit-docs/guides/common-recipes.mdx
----
-title: "Common recipes"
-description: "Practical bytekit patterns you can adapt quickly."
----
-
-## Authenticated API client
-
-```ts
-import { ApiClient } from "bytekit/api-client";
-
-export function createApiClient(token: string) {
-  return new ApiClient({
-    baseUrl: "https://api.example.com",
-    defaultHeaders: {
-      Authorization: `Bearer ${token}`,
-    },
-  });
-}
-```
-
-## Deduplicate concurrent reads
-
-```ts
-import { ApiClient, RequestDeduplicator } from "bytekit";
-
-const api = new ApiClient({ baseUrl: "https://api.example.com" });
-const deduplicator = new RequestDeduplicator();
-
-export function getCurrentUser() {
-  return deduplicator.execute("/me", () => api.get("/me"));
-}
-```
-
-## Wrap a slow operation with timeout
-
-```ts
-import { withTimeout } from "bytekit/async";
-
-const fetchReport = withTimeout(async (id: string) => {
-  const response = await fetch(`/api/reports/${id}`);
-  return response.json();
-}, 5000);
-```
-
-## Rate-limit outbound requests
-
-```ts
-import { ApiClient, RateLimiter } from "bytekit";
-
-const limiter = new RateLimiter({
-  maxRequests: 20,
-  windowMs: 60_000,
-});
-
-const api = new ApiClient({
-  baseUrl: "https://api.example.com",
-  interceptors: {
-    request: async (url, init) => {
-      await limiter.waitForAllowance(url);
-      return [url, init];
-    },
-  },
-});
-```
-
-## Validate API responses at the edge
-
-```ts
-import { ApiClient, zodAdapter } from "bytekit";
-import { z } from "zod";
-
-const ProjectSchema = z.object({
-  id: z.string(),
-  name: z.string(),
-});
-
-const api = new ApiClient({
-  baseUrl: "https://api.example.com",
-});
-
-export async function getProject(id: string) {
-  return api.get(`/projects/${id}`, {
-    validateResponse: zodAdapter(ProjectSchema),
-  });
-}
-```
-
-## Stream NDJSON data
-
-```ts
-import { StreamingHelper } from "bytekit";
-
-await StreamingHelper.streamJsonLines("https://api.example.com/logs", {
-  onChunk: (line) => {
-    console.log("received", line);
-  },
-});
-```
-
-<Note>
-  These recipes are intentionally small. For fuller context, continue into the linked guides for HTTP, resilience, async control, and streaming.
-</Note>

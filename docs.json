@@ -1,7 +1,7 @@
 {
   "$schema": "https://mintlify.com/docs.json",
   "theme": "mint",
-  "name": "bytekit",
+  "name": "ByteKit",
   "colors": {
     "primary": "#16A34A",
     "light": "#07C983",
@@ -41,6 +41,32 @@
             "pages": [
               "reference/overview",
               "reference/import-paths"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API reference",
+        "groups": [
+          {
+            "group": "Overview",
+            "pages": [
+              "api-reference/overview"
+            ]
+          },
+          {
+            "group": "Core modules",
+            "pages": [
+              "api-reference/http-client",
+              "api-reference/resilience",
+              "api-reference/async",
+              "api-reference/observability"
+            ]
+          },
+          {
+            "group": "Helpers",
+            "pages": [
+              "api-reference/helpers"
             ]
           }
         ]

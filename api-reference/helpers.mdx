@@ -1,0 +1,70 @@
+---
+title: "Helpers"
+description: "Reference for ByteKit helper modules outside the core HTTP and async APIs."
+---
+
+## Environment and storage
+
+| Entrypoint | Main export | Purpose |
+| --- | --- | --- |
+| `bytekit/env-manager` | `EnvManager` | Access environment values across runtimes |
+| `bytekit/storage-utils` | storage helpers | Browser and storage-related helpers |
+
+## Realtime and transport helpers
+
+| Entrypoint | Main export | Purpose |
+| --- | --- | --- |
+| `bytekit/streaming` | `StreamingHelper` | NDJSON, SSE, downloads |
+| `bytekit/websocket` | `WebSocketHelper` | WebSocket connection helpers |
+| `bytekit/file-upload` | file upload helpers | Upload-oriented helpers |
+| `bytekit/polling-helper` | `PollingHelper` | Polling workflows with control hooks |
+
+## Generic utility helpers
+
+| Entrypoint | Main export | Purpose |
+| --- | --- | --- |
+| `bytekit/cache-manager` | `CacheManager` | General cache strategies |
+| `bytekit/compression-utils` | `CompressionUtils` | Compress and decompress data |
+| `bytekit/crypto-utils` | `CryptoUtils` | Hashing, HMAC, UUID, token helpers |
+| `bytekit/diff-utils` | `DiffUtils` | Diff objects and arrays |
+| `bytekit/event-emitter` | `EventEmitter` | Typed event emitter primitives |
+
+## `StreamingHelper`
+
+Main methods:
+
+- `streamJsonLines(endpoint, options?)`
+- `streamSSE(endpoint, options?)`
+- `downloadStream(endpoint, options?)`
+
+## `CacheManager`
+
+Use it when you want broader caching strategies than request-specific caching.
+
+Typical use cases:
+
+- Cache computed values
+- Layer memory and persistent storage
+- Track hit rate and cache size
+
+## `CryptoUtils`
+
+Use it for:
+
+- Hashing
+- HMAC generation
+- UUID generation
+- Secure token workflows
+- Constant-time comparison
+
+## `EventEmitter`
+
+Use it when you need a lightweight event bus without pulling another event library.
+
+## `PollingHelper`
+
+Use it when a workflow needs repeat checks with consistent timing and control over stop conditions.
+
+<Note>
+  These helpers are intentionally modular. Most apps only need a small subset, so prefer the narrow entrypoint for each use case.
+</Note>
