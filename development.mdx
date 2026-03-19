@@ -14,7 +14,7 @@ This page is for contributors who edit the ByteKit docs site itself.
 ## Prerequisites
 
 - Node.js 18 or newer
-- The `mint` docs CLI available in your shell
+- The docs CLI available in your shell
 - Access to the `bytekit` package repo when you need to verify exports or examples
 
 ## Run the docs site locally
@@ -73,13 +73,13 @@ This site should reflect the real ByteKit package surface. When you update conte
     If you add or rename a page, keep `docs.json` in sync.
   </Step>
   <Step title="Run link validation">
-    Use `mint broken-links` before you commit.
+    Run the link validation command before you commit.
   </Step>
 </Steps>
 
 ## What a good docs change looks like
 
-- The page speaks about ByteKit, not the docs platform.
+- The page speaks directly about ByteKit.
 - Code samples match current public exports.
 - Navigation stays in sync with the content.
 - `mint broken-links` passes before commit.

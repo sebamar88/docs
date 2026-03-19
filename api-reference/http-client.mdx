@@ -3,6 +3,16 @@ title: "HTTP client"
 description: "Reference for ApiClient, ApiError, request options, and schema adapters."
 ---
 
+## What belongs here
+
+Use this page when you need to understand the request layer itself:
+
+- `ApiClient`
+- `ApiError`
+- per-request options
+- schema adapters
+- built-in response validation
+
 ## Module entrypoints
 
 - `bytekit`
@@ -32,6 +42,20 @@ Primary class for isomorphic HTTP requests.
 | `retryPolicy` | Retry policy config |
 | `circuitBreaker` | Circuit breaker config |
 
+### Basic setup
+
+```ts
+import { ApiClient } from "bytekit/api-client";
+
+const api = new ApiClient({
+  baseUrl: "https://api.example.com",
+  timeoutMs: 10_000,
+  defaultHeaders: {
+    Authorization: `Bearer ${token}`,
+  },
+});
+```
+
 ### Main methods
 
 | Method | Purpose |
@@ -42,6 +66,49 @@ Primary class for isomorphic HTTP requests.
 | `patch(path, bodyOrOptions?)` | PATCH request |
 | `delete(path, options?)` | DELETE request |
 | `getList(path, options?)` | Paginated list requests with filters and sort |
+
+### Read data
+
+```ts
+type User = {
+  id: number;
+  name: string;
+  email: string;
+};
+
+const users = await api.get<User[]>("/users");
+```
+
+### Write data
+
+```ts
+const created = await api.post<{ id: string }>("/users", {
+  name: "Ada Lovelace",
+  email: "ada@example.com",
+});
+```
+
+### Query params
+
+```ts
+const results = await api.get("/users", {
+  searchParams: {
+    page: 1,
+    limit: 20,
+    status: "active",
+  },
+});
+```
+
+### Paginated lists with filters and sort
+
+```ts
+const page = await api.getList<{ id: number; name: string }>("/users", {
+  pagination: { page: 1, limit: 25 },
+  sort: { field: "name", order: "asc" },
+  filters: { status: "active" },
+});
+```
 
 ### Request options
 
@@ -56,6 +123,25 @@ Primary class for isomorphic HTTP requests.
 | `skipRetry` | Skip retry policy for one call |
 | `skipInterceptors` | Skip interceptors for one call |
 
+### Interceptors
+
+```ts
+const api = new ApiClient({
+  baseUrl: "https://api.example.com",
+  interceptors: {
+    request: async (url, init) => {
+      const headers = new Headers(init.headers);
+      headers.set("X-Request-Id", crypto.randomUUID());
+      return [url, { ...init, headers }];
+    },
+    response: async (response) => {
+      console.log("status", response.status);
+      return response;
+    },
+  },
+});
+```
+
 ## `ApiError`
 
 Error type raised for failed HTTP requests.
@@ -68,6 +154,22 @@ Useful properties:
 - `body`
 - `isTimeout`
 - `details`
+
+### Error handling
+
+```ts
+import { ApiClient, ApiError } from "bytekit";
+
+try {
+  await api.get("/users/999");
+} catch (error) {
+  if (error instanceof ApiError) {
+    console.error(error.status);
+    console.error(error.message);
+    console.error(error.body);
+  }
+}
+```
 
 ## `zodAdapter` and `valibotAdapter`
 
@@ -100,3 +202,22 @@ Use this path when:
 - You want lightweight structural checks
 - You do not want to depend on Zod or Valibot
 - You want docs that stay package-native
+
+### Example with `ResponseValidator`
+
+```ts
+import { ResponseValidator } from "bytekit/response-validator";
+
+const schema = {
+  type: "object",
+  properties: {
+    id: { type: "number", required: true },
+    name: { type: "string", required: true },
+  },
+} as const;
+
+const errors = ResponseValidator.validate(
+  { id: 1, name: "Ada" },
+  schema
+);
+```

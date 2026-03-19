@@ -9,6 +9,10 @@ description: "Reference for logging, profiling, and debug helpers."
 - `bytekit/profiler`
 - `bytekit/debug`
 
+## What this layer solves
+
+Use these modules when you need visibility into runtime behavior without dragging observability concerns into every feature module.
+
 ## `Logger`
 
 Structured logger for browser and Node.js environments.
@@ -39,6 +43,26 @@ Structured logger for browser and Node.js environments.
 - `consoleTransportNode()`
 - `consoleTransportBrowser()`
 
+### Example
+
+```ts
+import { createLogger } from "bytekit";
+
+const logger = createLogger({
+  namespace: "billing",
+  level: "debug",
+});
+
+logger.info("Creating invoice", { id: "inv_123" });
+```
+
+### Child loggers
+
+```ts
+const paymentsLogger = logger.child("payments");
+paymentsLogger.warn("Gateway latency detected");
+```
+
 ## `Profiler`
 
 Use this module to measure execution time around async or sync work.
@@ -48,6 +72,20 @@ Typical use cases:
 - Compare competing implementations
 - Instrument slow workflows
 - Collect app-level timing checkpoints
+
+### Example
+
+```ts
+import { Profiler } from "bytekit/profiler";
+
+const profiler = new Profiler("checkout");
+
+profiler.start("create-payment");
+await createPayment();
+profiler.end("create-payment");
+
+console.log(profiler.summary());
+```
 
 ## `debug`
 

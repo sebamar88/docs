@@ -7,6 +7,10 @@ description: "Reference for ByteKit async utilities and flow-control helpers."
 
 - `bytekit/async`
 
+## What this module is for
+
+Use `bytekit/async` when you need control over timing, retries, and concurrency outside the HTTP client itself.
+
 ## Timing
 
 | Export | Purpose |
@@ -14,6 +18,14 @@ description: "Reference for ByteKit async utilities and flow-control helpers."
 | `sleep(ms, signal?)` | Delay execution with optional abort support |
 | `timeout(promise, ms, message?)` | Add a timeout to a promise |
 | `withTimeout(fn, ms, message?)` | Wrap a function with timeout behavior |
+
+### Example: timeout around a promise
+
+```ts
+import { timeout } from "bytekit/async";
+
+const report = await timeout(fetchReport(), 5000);
+```
 
 ## Retry and execution control
 
@@ -23,6 +35,29 @@ description: "Reference for ByteKit async utilities and flow-control helpers."
 | `debounceAsync(fn, waitOrOptions)` | Debounce an async function |
 | `throttleAsync(fn, waitOrOptions)` | Throttle an async function |
 
+### Example: retry a flaky operation
+
+```ts
+import { retry } from "bytekit/async";
+
+const payload = await retry(() => fetchData(), {
+  maxAttempts: 5,
+  baseDelay: 1000,
+  backoff: "exponential",
+});
+```
+
+### Example: debounce async search
+
+```ts
+import { debounceAsync } from "bytekit/async";
+
+const debouncedSearch = debounceAsync(async (query: string) => {
+  const response = await fetch(`/api/search?q=${query}`);
+  return response.json();
+}, 300);
+```
+
 ## Concurrency and coordination
 
 | Export | Purpose |
@@ -31,6 +66,31 @@ description: "Reference for ByteKit async utilities and flow-control helpers."
 | `sequential(tasks, options?)` | Run tasks one after another |
 | `race(promises)` | Resolve with the first successful or settled candidate according to module semantics |
 | `allSettled(promises)` | Collect fulfilled and rejected results |
+
+### Example: bounded concurrency
+
+```ts
+import { parallel } from "bytekit/async";
+
+const results = await parallel(
+  files.map((file) => () => uploadFile(file)),
+  { concurrency: 5 }
+);
+```
+
+### Example: multi-source fallback
+
+```ts
+import { race, sleep } from "bytekit/async";
+
+const result = await race([
+  fetchFromPrimaryRegion(),
+  fetchFromSecondaryRegion(),
+  sleep(5000).then(() => {
+    throw new Error("Timeout");
+  }),
+]);
+```
 
 ## Error types
 
@@ -65,7 +125,7 @@ The async module also exposes specialized error classes:
 | --- | --- |
 | `continueOnError` | Keep executing after failures |
 
-## Example
+## Combined example
 
 ```ts
 import { parallel, retry, timeout } from "bytekit/async";
