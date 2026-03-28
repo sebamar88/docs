@@ -60,7 +60,8 @@
               "api-reference/http-client",
               "api-reference/api-client",
               "api-reference/response-validator",
-              "api-reference/schema-adapters"
+              "api-reference/schema-adapters",
+              "api-reference/url-helper"
             ]
           },
           {
@@ -78,10 +79,7 @@
           {
             "group": "Async",
             "pages": [
-              "api-reference/async",
-              "api-reference/async-timing",
-              "api-reference/async-control",
-              "api-reference/async-concurrency"
+              "api-reference/async"
             ]
           },
           {
@@ -106,7 +104,8 @@
               "api-reference/crypto-utils",
               "api-reference/diff-utils",
               "api-reference/event-emitter",
-              "api-reference/polling-helper"
+              "api-reference/polling-helper",
+              "api-reference/url-helper"
             ]
           }
         ]

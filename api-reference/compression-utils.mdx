@@ -1,6 +1,6 @@
 ---
 title: "CompressionUtils"
-description: "Reference and examples for CompressionUtils."
+description: "LZ-based string compression with Base64 and Uint8Array output formats."
 ---
 
 ## Import
@@ -9,8 +9,141 @@ description: "Reference and examples for CompressionUtils."
 import { CompressionUtils } from "bytekit/compression-utils";
 ```
 
-## Use it for
+## What it does
 
-- compressing payloads
-- decompressing serialized content
-- estimating compression ratio
+`CompressionUtils` provides **static** methods for LZ-based string compression and decompression. It supports multiple output formats — plain string, Base64, and `Uint8Array` — and includes convenience methods for compressing and decompressing JSON objects directly.
+
+<Info>
+  The compression algorithm is deterministic and synchronous. It works in both browser and Node.js environments without native dependencies.
+</Info>
+
+## Methods
+
+### `compress(data, options?)`
+
+```ts
+const compressed = CompressionUtils.compress("Hello, world!");
+```
+
+Compresses a string using LZ-based compression and returns a compressed string.
+
+| Parameter | Type | Description |
+| --- | --- | --- |
+| `data` | `string` | The string to compress. |
+| `options` | `object` | Optional compression options. |
+
+### `decompress(compressed)`
+
+```ts
+const original = CompressionUtils.decompress(compressed);
+```
+
+Decompresses a previously compressed string.
+
+### `compressToBase64(data)`
+
+```ts
+const b64 = CompressionUtils.compressToBase64(largePayload);
+```
+
+Compresses a string and returns the result as a Base64-encoded string. Useful for URL parameters or storage in text-only fields.
+
+### `decompressFromBase64(base64)`
+
+```ts
+const original = CompressionUtils.decompressFromBase64(b64);
+```
+
+Decompresses a Base64-encoded compressed string.
+
+### `compressToUint8Array(data)`
+
+```ts
+const bytes = CompressionUtils.compressToUint8Array(payload);
+```
+
+Compresses a string and returns the result as a `Uint8Array`. Ideal for binary transport (WebSocket, IndexedDB).
+
+### `decompressFromUint8Array(compressed)`
+
+```ts
+const original = CompressionUtils.decompressFromUint8Array(bytes);
+```
+
+Decompresses a `Uint8Array` back to the original string.
+
+### `estimateCompressionRatio(data)`
+
+```ts
+const ratio = CompressionUtils.estimateCompressionRatio(jsonString);
+console.log(`Compression ratio: ${(ratio * 100).toFixed(1)}%`);
+```
+
+Returns a number between 0 and 1 representing the estimated compression ratio. A value of `0.3` means the compressed output is roughly 30% of the original size.
+
+### `compressJSON(obj)`
+
+```ts
+const compressed = CompressionUtils.compressJSON({ users: largeArray });
+```
+
+Serializes an object to JSON and compresses the result in one step.
+
+### `decompressJSON<T>(compressed)`
+
+```ts
+const data = CompressionUtils.decompressJSON<UserList>(compressed);
+```
+
+Decompresses a string and parses the result as JSON, returning a typed object.
+
+## Examples
+
+### Compress state for URL sharing
+
+```ts
+import { CompressionUtils } from "bytekit/compression-utils";
+
+const state = JSON.stringify({ filters: selectedFilters, view: "grid" });
+const encoded = CompressionUtils.compressToBase64(state);
+const shareUrl = `${location.origin}/dashboard?state=${encodeURIComponent(encoded)}`;
+```
+
+### Compress JSON for localStorage
+
+```ts
+import { CompressionUtils } from "bytekit/compression-utils";
+
+// Save
+const compressed = CompressionUtils.compressJSON(appState);
+localStorage.setItem("state", compressed);
+
+// Restore
+const restored = CompressionUtils.decompressJSON<AppState>(
+  localStorage.getItem("state")!,
+);
+```
+
+### Estimate savings before compressing
+
+```ts
+import { CompressionUtils } from "bytekit/compression-utils";
+
+const payload = JSON.stringify(report);
+const ratio = CompressionUtils.estimateCompressionRatio(payload);
+
+if (ratio < 0.8) {
+  // Worth compressing — more than 20% savings
+  return CompressionUtils.compress(payload);
+}
+
+return payload;
+```
+
+<Tip>
+  Use `compressToBase64` when the compressed output needs to travel through text-only channels (URLs, JSON fields, cookies).
+</Tip>
+
+<Warning>
+  Compression is most effective on repetitive or structured text. Small strings (under ~100 characters) may produce output that is larger than the input.
+</Warning>

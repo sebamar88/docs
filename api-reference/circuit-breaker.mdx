@@ -1,6 +1,6 @@
 ---
 title: "CircuitBreaker"
-description: "Class reference and examples for CircuitBreaker."
+description: "Protect downstream services with a three-state circuit breaker pattern."
 ---
 
 ## Import
@@ -9,26 +9,134 @@ description: "Class reference and examples for CircuitBreaker."
 import { CircuitBreaker } from "bytekit/retry-policy";
 ```
 
-## Config
+## What it does
 
-- `failureThreshold`
-- `successThreshold`
-- `timeoutMs`
-- `errorMessageFormatter`
+`CircuitBreaker` implements the circuit breaker pattern to prevent cascading failures. When failures exceed a threshold, the breaker _opens_ and immediately rejects calls for a cooldown period instead of overloading an already-failing service.
 
-## Example
+<Info>
+  `ApiClient` creates an internal `CircuitBreaker` from the `circuitBreaker` config option. Use this class directly when you need circuit breaking outside of HTTP requests.
+</Info>
+
+## Constructor
 
 ```ts
+const breaker = new CircuitBreaker(config?: CircuitBreakerConfig);
+```
+
+### `CircuitBreakerConfig`
+
+| Property | Type | Default | Description |
+| --- | --- | --- | --- |
+| `failureThreshold` | `number` | `5` | Consecutive failures before the circuit opens. |
+| `successThreshold` | `number` | `2` | Consecutive successes in half-open state required to close the circuit. |
+| `timeoutMs` | `number` | `60000` | How long the circuit stays open before transitioning to half-open (ms). |
+| `errorMessageFormatter` | `(retryAfterMs: number) => string` | — | Custom formatter for the "circuit open" error message. |
+
+## Methods
+
+### `execute<T>(fn)`
+
+```ts
+const result = await breaker.execute(() => callExternalService());
+```
+
+Runs `fn` if the circuit is closed or half-open. Throws immediately if the circuit is open and the timeout has not expired.
+
+| Parameter | Type | Description |
+| --- | --- | --- |
+| `fn` | `() => Promise<T>` | The async function to protect. |
+
+### `getState()`
+
+```ts
+const state = breaker.getState();
+// "closed" | "open" | "half-open"
+```
+
+Returns the current state of the circuit.
+
+### `reset()`
+
+```ts
+breaker.reset();
+```
+
+Manually resets the circuit to the `closed` state, clearing all counters.
+
+## State machine
+
+The circuit breaker cycles through three states:
+
+```
+┌────────┐  failures >= threshold   ┌────────┐
+│ Closed │ ──────────────────────▶  │  Open  │
+└────────┘                          └────────┘
+    ▲                                   │
+    │                                   │ timeout expires
+    │                                   ▼
+    │   successes >= threshold    ┌───────────┐
+    └──────────────────────────── │ Half-Open │
+                                  └───────────┘
+```
+
+| State | Behavior |
+| --- | --- |
+| **Closed** | Requests pass through. Failures increment the counter. |
+| **Open** | All calls are rejected immediately with an error. The breaker waits for `timeoutMs` before moving to half-open. |
+| **Half-Open** | A limited number of calls pass through. If `successThreshold` consecutive calls succeed, the circuit closes. Any failure re-opens it. |
+
+## Examples
+
+### Basic usage
+
+```ts
+import { CircuitBreaker } from "bytekit/retry-policy";
+
 const breaker = new CircuitBreaker({
   failureThreshold: 5,
+  successThreshold: 2,
   timeoutMs: 30_000,
 });
 
-const result = await breaker.execute(() => fetchCriticalData());
+try {
+  const data = await breaker.execute(() => fetchFromPaymentGateway());
+} catch (err) {
+  if (breaker.getState() === "open") {
+    console.warn("Circuit is open — using fallback");
+    return cachedData;
+  }
+  throw err;
+}
 ```
 
-## Main methods
+### Custom error message
 
-- `execute(fn)`
-- `getState()`
-- `reset()`
+```ts
+const breaker = new CircuitBreaker({
+  failureThreshold: 3,
+  timeoutMs: 60_000,
+  errorMessageFormatter: (retryAfterMs) =>
+    `Service unavailable. Try again in ${Math.ceil(retryAfterMs / 1000)}s.`,
+});
+```
+
+### Combined with RetryPolicy
+
+```ts
+import { RetryPolicy, CircuitBreaker } from "bytekit/retry-policy";
+
+const breaker = new CircuitBreaker({ failureThreshold: 5 });
+const retryPolicy = new RetryPolicy({ maxAttempts: 3 });
+
+const data = await breaker.execute(() =>
+  retryPolicy.execute(() => fetchCriticalData()),
+);
+```
+
+<Tip>
+  When using `ApiClient`, both retry and circuit breaker are configured together in the constructor — you don't need to compose them manually.
+</Tip>
+
+<Warning>
+  The circuit breaker does not persist state across process restarts. In serverless or multi-instance environments, each instance maintains its own circuit state.
+</Warning>

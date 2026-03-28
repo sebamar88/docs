@@ -1,33 +1,212 @@
 ---
 title: "EventEmitter"
-description: "Class reference and examples for EventEmitter."
+description: "Lightweight typed event bus with subscribe, once, and async waitFor support."
 ---
 
 ## Import
 
 ```ts
-import { EventEmitter } from "bytekit/event-emitter";
+import { EventEmitter, createEventEmitter } from "bytekit/event-emitter";
 ```
 
-## Main methods
+## What it does
 
-- `on(event, listener)`
-- `once(event, listener)`
-- `off(event, listener)`
-- `removeAllListeners(event?)`
-- `emit(event, data)`
-- `emitSync(event, data)`
-- `onError(listener)`
-- `listenerCount(event)`
+`EventEmitter` is a minimal, fully-typed publish/subscribe event bus. It supports standard `on`/`off`/`emit` semantics, one-time listeners, async waiting for events, and introspection. The generic type parameter ensures event names and payloads are type-checked at compile time.
 
-## Example
+## Constructor
 
 ```ts
-type Events = {
-  "job:done": { id: string };
-};
-
-const emitter = new EventEmitter<Events>();
-emitter.on("job:done", ({ id }) => console.log(id));
-await emitter.emit("job:done", { id: "42" });
+const emitter = new EventEmitter<EventMap>();
 ```
+
+The type parameter defines the mapping from event names to their payload types.
+
+```ts
+interface AppEvents {
+  login: { userId: string };
+  logout: undefined;
+  error: Error;
+}
+
+const emitter = new EventEmitter<AppEvents>();
+```
+
+## Factory
+
+```ts
+const emitter = createEventEmitter<AppEvents>();
+```
+
+Convenience function that returns a new `EventEmitter` instance.
+
+## Methods
+
+### `on(event, handler)`
+
+```ts
+const unsub = emitter.on("login", (payload) => {
+  console.log(`User ${payload.userId} logged in`);
+});
+
+// Later…
+unsub();
+```
+
+Registers a handler for `event` and returns an **unsubscribe** function.
+
+| Parameter | Type | Description |
+| --- | --- | --- |
+| `event` | `keyof T` | Event name. |
+| `handler` | `(payload: T[event]) => void` | Callback invoked when the event fires. |
+
+### `once(event, handler)`
+
+```ts
+const unsub = emitter.once("login", (payload) => {
+  console.log("First login:", payload.userId);
+});
+```
+
+Like `on`, but the handler is automatically removed after it fires once. Returns an unsubscribe function in case you need to cancel before it fires.
+
+### `off(event, handler)`
+
+```ts
+emitter.off("login", myHandler);
+```
+
+Removes a specific handler for `event`.
+
+### `emit(event, ...args)`
+
+```ts
+emitter.emit("login", { userId: "u_42" });
+emitter.emit("logout");
+```
+
+Fires an event, invoking all registered handlers synchronously in registration order.
+
+### `removeAllListeners(event?)`
+
+```ts
+emitter.removeAllListeners("login"); // Remove handlers for "login" only
+emitter.removeAllListeners();         // Remove all handlers for all events
+```
+
+Removes all handlers for a specific event, or for all events if no argument is provided.
+
+### `listenerCount(event)`
+
+```ts
+console.log(emitter.listenerCount("login")); // 3
+```
+
+Returns the number of handlers registered for `event`.
+
+### `eventNames()`
+
+```ts
+console.log(emitter.eventNames()); // ["login", "error"]
+```
+
+Returns an array of event names that have at least one registered handler.
+
+### `getListeners(event)`
+
+```ts
+const handlers = emitter.getListeners("login");
+```
+
+Returns the array of handler functions registered for `event`.
+
+### `waitFor(event, timeout?)`
+
+```ts
+const payload = await emitter.waitFor("login", 5000);
+console.log("User logged in:", payload);
+```
+
+Returns a promise that resolves with the event payload when the event fires, or rejects after `timeout` ms. Useful for turning event-driven flows into `async`/`await` code.
+
+| Parameter | Type | Default | Description |
+| --- | --- | --- | --- |
+| `event` | `keyof T` | — | Event to wait for. |
+| `timeout` | `number` | — | Optional timeout in ms. Rejects with an error if exceeded. |
+
+## Examples
+
+### Typed application bus
+
+```ts
+import { createEventEmitter } from "bytekit/event-emitter";
+
+interface AppEvents {
+  "user:login": { userId: string; role: string };
+  "user:logout": undefined;
+  "notification": { title: string; body: string };
+}
+
+const bus = createEventEmitter<AppEvents>();
+
+bus.on("user:login", ({ userId, role }) => {
+  console.log(`${userId} logged in as ${role}`);
+});
+
+bus.on("notification", ({ title }) => {
+  showToast(title);
+});
+
+bus.emit("user:login", { userId: "u_42", role: "admin" });
+```
+
+### One-time initialization hook
+
+```ts
+import { EventEmitter } from "bytekit/event-emitter";
+
+const emitter = new EventEmitter<{ ready: { version: string } }>();
+
+emitter.once("ready", ({ version }) => {
+  console.log(`App v${version} is ready`);
+});
+
+emitter.emit("ready", { version: "2.0.0" });
+emitter.emit("ready", { version: "2.0.0" }); // No output — handler was removed
+```
+
+### Await an event with timeout
+
+```ts
+import { createEventEmitter } from "bytekit/event-emitter";
+
+const emitter = createEventEmitter<{ "data:loaded": { rows: number } }>();
+
+try {
+  const payload = await emitter.waitFor("data:loaded", 10_000);
+  console.log(`Loaded ${payload.rows} rows`);
+} catch {
+  console.error("Timed out waiting for data");
+}
+```
+
+### Clean up on component unmount
+
+```ts
+import { createEventEmitter } from "bytekit/event-emitter";
+
+const emitter = createEventEmitter<{ update: { value: number } }>();
+
+// In a React effect or similar lifecycle
+const unsub = emitter.on("update", ({ value }) => setState(value));
+
+// Cleanup
+return () => unsub();
+```
+
+<Tip>
+  Use `waitFor` to bridge event-driven APIs with `async`/`await` — it's ideal for waiting on initialization events, one-shot data loads, or test assertions.
+</Tip>
+
+<Warning>
+  `emit` calls handlers synchronously. If a handler throws, subsequent handlers for the same event will not be called. Wrap handlers in try/catch if fault isolation is needed.
+</Warning>

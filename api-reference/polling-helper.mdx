@@ -1,31 +1,163 @@
 ---
 title: "PollingHelper"
-description: "Class reference and examples for PollingHelper."
+description: "Configurable polling workflows with backoff, jitter, abort support, and response-time metrics."
 ---
 
 ## Import
 
 ```ts
-import { PollingHelper } from "bytekit/polling-helper";
+import { PollingHelper, createPoller } from "bytekit/polling-helper";
 ```
 
-## Main methods
+## What it does
 
-- `start()`
-- `startWithAbort()`
-- `abort()`
+`PollingHelper` repeatedly calls an async function on a schedule until a stop condition is met, a limit is reached, or the caller aborts. It supports exponential and linear backoff, jitter, per-attempt timeouts, and lifecycle hooks.
 
-## Example
+## Constructor
 
 ```ts
+const poller = new PollingHelper<T>(fn: () => Promise<T>, options?: PollingOptions<T>);
+```
+
+### `PollingOptions<T>`
+
+| Property | Type | Default | Description |
+| --- | --- | --- | --- |
+| `interval` | `number` | `1000` | Base interval between attempts (ms). |
+| `maxAttempts` | `number` | `Infinity` | Maximum number of attempts. |
+| `maxDuration` | `number` | `Infinity` | Maximum total polling duration (ms). |
+| `backoffMultiplier` | `number` | `1` | Multiplier applied to interval after each attempt. |
+| `maxBackoffInterval` | `number` | `30000` | Upper bound for the computed interval. |
+| `exponentialBase` | `number` | `2` | Base for exponential backoff calculation. |
+| `jitter` | `false \| number` | `false` | Add random jitter. `false` disables it; a number `0–100` sets the jitter percentage. |
+| `attemptTimeout` | `number` | — | Timeout per individual attempt (ms). |
+| `retryOnError` | `boolean` | `true` | Continue polling when an attempt throws. |
+| `stopCondition` | `(result: T) => boolean` | — | Return `true` to stop polling early. |
+| `onAttempt` | `(attempt: number) => void` | — | Called before each attempt. |
+| `onSuccess` | `(result: T) => void` | — | Called when an attempt succeeds. |
+| `onError` | `(error: Error) => void` | — | Called when an attempt fails. |
+
+## Instance methods
+
+| Method | Returns | Description |
+| --- | --- | --- |
+| `start()` | `Promise<PollingResult<T>>` | Run the polling loop until completion. |
+| `startWithAbort()` | `Promise<PollingResult<T>>` | Same as `start()`, but can be cancelled via `abort()`. |
+| `abort()` | `void` | Cancel a running poll started with `startWithAbort()`. |
+
+## `PollingResult<T>`
+
+| Property | Type | Description |
+| --- | --- | --- |
+| `success` | `boolean` | Whether polling ended with a fulfilled stop condition. |
+| `result` | `T \| undefined` | Last successful result. |
+| `error` | `Error \| undefined` | Last error, if any. |
+| `attempts` | `number` | Total attempts executed. |
+| `duration` | `number` | Total elapsed time (ms). |
+| `metrics` | `object \| undefined` | Response-time statistics (see below). |
+
+### `metrics`
+
+| Property | Type |
+| --- | --- |
+| `minResponseTime` | `number` |
+| `maxResponseTime` | `number` |
+| `avgResponseTime` | `number` |
+
+## Static methods
+
+| Method | Description |
+| --- | --- |
+| `PollingHelper.poll(fn, options?)` | One-shot poll using default options. |
+| `PollingHelper.pollWithBackoff(fn, options?)` | Poll with exponential backoff pre-configured. |
+| `PollingHelper.pollWithLinearBackoff(fn, options?)` | Poll with linear backoff pre-configured. |
+
+## Factory
+
+```ts
+const poller = createPoller(fn, options?);
+```
+
+Returns a `PollingHelper` instance — useful when you want to configure once and call `start()` later.
+
+## Examples
+
+### Basic polling with stop condition
+
+```ts
+import { PollingHelper } from "bytekit/polling-helper";
+
 const poller = new PollingHelper(
-  () => fetchJobStatus(),
+  () => fetch("/api/jobs/42").then((r) => r.json()),
   {
-    interval: 5000,
+    interval: 3000,
     maxAttempts: 20,
-    stopCondition: (result) => result.status === "done",
+    stopCondition: (job) => job.status === "done",
   }
 );
 
-const result = await poller.start();
+const { success, result, attempts } = await poller.start();
 ```
+
+### Exponential backoff with jitter
+
+```ts
+const poller = new PollingHelper(checkDeploy, {
+  interval: 1000,
+  backoffMultiplier: 2,
+  maxBackoffInterval: 30_000,
+  jitter: 25,
+  maxDuration: 120_000,
+  stopCondition: (r) => r.ready,
+});
+
+const outcome = await poller.start();
+```
+
+### Abortable polling
+
+```ts
+const poller = new PollingHelper(fetchStatus, {
+  interval: 5000,
+  stopCondition: (s) => s.complete,
+});
+
+// Start in background
+const promise = poller.startWithAbort();
+
+// Cancel from outside
+setTimeout(() => poller.abort(), 60_000);
+
+const result = await promise;
+```
+
+### Static shorthand
+
+```ts
+import { PollingHelper } from "bytekit/polling-helper";
+
+const result = await PollingHelper.pollWithBackoff(
+  () => checkProvisioningStatus(),
+  {
+    maxAttempts: 10,
+    stopCondition: (r) => r.provisioned,
+  }
+);
+```
+
+### Lifecycle hooks
+
+```ts
+const poller = new PollingHelper(fetchMetrics, {
+  interval: 2000,
+  maxAttempts: 15,
+  stopCondition: (m) => m.healthy,
+  onAttempt: (n) => console.log(`Attempt ${n}`),
+  onSuccess: (m) => console.log("Latest:", m),
+  onError: (err) => console.warn("Failed:", err.message),
+});
+```
+
+<Tip>
+  Use `jitter` in production to avoid thundering-herd problems when many clients poll the same endpoint.
+</Tip>

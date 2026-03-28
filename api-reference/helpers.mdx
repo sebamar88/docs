@@ -1,208 +1,51 @@
 ---
 title: "Helpers"
-description: "Reference for ByteKit helper modules outside the core HTTP and async APIs."
+description: "Overview of ByteKit helper modules — environment, transport, caching, crypto, eventing, polling, and more."
 ---
 
 ## What lives here
 
-These modules cover the rest of the public package surface: runtime helpers, transport utilities, caching, crypto, eventing, and polling.
+These modules cover the rest of the public package surface: runtime helpers, transport utilities, caching, crypto, eventing, URL tools, and polling. Each has a focused entrypoint — import only what you need.
 
-## Environment and storage
-
-| Entrypoint | Main export | Purpose |
-| --- | --- | --- |
-| `bytekit/env-manager` | `EnvManager` | Access environment values across runtimes |
-| `bytekit/storage-utils` | storage helpers | Browser and storage-related helpers |
-
-### `EnvManager`
-
-Main methods:
-
-- `get(name)`
-- `require(name)`
-- `isProd()`
-
-Example:
-
-```ts
-import { EnvManager } from "bytekit";
-
-const env = new EnvManager();
-
-const apiUrl = env.require("API_URL");
-const locale = env.get("APP_LOCALE") || "en";
-```
-
-## Realtime and transport helpers
-
-| Entrypoint | Main export | Purpose |
-| --- | --- | --- |
-| `bytekit/streaming` | `StreamingHelper` | NDJSON, SSE, downloads |
-| `bytekit/websocket` | `WebSocketHelper` | WebSocket connection helpers |
-| `bytekit/file-upload` | file upload helpers | Upload-oriented helpers |
-| `bytekit/polling-helper` | `PollingHelper` | Polling workflows with control hooks |
-
-## Generic utility helpers
-
-| Entrypoint | Main export | Purpose |
-| --- | --- | --- |
-| `bytekit/cache-manager` | `CacheManager` | General cache strategies |
-| `bytekit/compression-utils` | `CompressionUtils` | Compress and decompress data |
-| `bytekit/crypto-utils` | `CryptoUtils` | Hashing, HMAC, UUID, token helpers |
-| `bytekit/diff-utils` | `DiffUtils` | Diff objects and arrays |
-| `bytekit/event-emitter` | `EventEmitter` | Typed event emitter primitives |
-
-## `StreamingHelper`
-
-Main methods:
-
-- `streamJsonLines(endpoint, options?)`
-- `streamSSE(endpoint, options?)`
-- `downloadStream(endpoint, options?)`
-
-Example:
-
-```ts
-import { StreamingHelper } from "bytekit";
-
-const result = await StreamingHelper.streamJsonLines("/api/logs", {
-  onChunk: (chunk) => console.log(chunk),
-});
-```
-
-## `WebSocketHelper`
-
-Main methods:
-
-- `connect()`
-- `send(type, data)`
-- `on(type, handler)`
-- `onError(handler)`
-- `request(type, data, responseType?)`
-- `close()`
-- `isConnected()`
-- `getState()`
-
-Example:
-
-```ts
-import { WebSocketHelper } from "bytekit/websocket";
-
-const socket = new WebSocketHelper("wss://example.com/socket");
-await socket.connect();
-
-socket.on("price:update", (payload) => {
-  console.log(payload);
-});
-```
-
-## `CacheManager`
-
-Use it when you want broader caching strategies than request-specific caching.
-
-Typical use cases:
-
-- Cache computed values
-- Layer memory and persistent storage
-- Track hit rate and cache size
-
-Example:
-
-```ts
-import { CacheManager } from "bytekit/cache-manager";
-
-const cache = new CacheManager({
-  defaultTTL: 60_000,
-  maxMemorySize: 100,
-  enableLocalStorage: true,
-});
-
-const stats = await cache.getOrCompute("dashboard-stats", loadStats);
-```
-
-## `CryptoUtils`
-
-Use it for:
-
-- Hashing
-- HMAC generation
-- UUID generation
-- Secure token workflows
-- Constant-time comparison
-
-Example:
-
-```ts
-import { CryptoUtils } from "bytekit/crypto-utils";
-
-const token = CryptoUtils.generateToken(32);
-const uuid = CryptoUtils.generateUUID();
-const hash = await CryptoUtils.hash("payload");
-```
-
-## `EventEmitter`
-
-Main methods:
-
-- `on(event, listener)`
-- `once(event, listener)`
-- `off(event, listener)`
-- `emit(event, data)`
-- `emitSync(event, data)`
-- `onError(listener)`
-- `listenerCount(event)`
-
-Example:
-
-```ts
-import { EventEmitter } from "bytekit/event-emitter";
-
-type Events = {
-  "job:done": { id: string };
-};
-
-const emitter = new EventEmitter<Events>();
-emitter.on("job:done", ({ id }) => console.log(id));
-await emitter.emit("job:done", { id: "42" });
-```
-
-## `PollingHelper`
-
-Use it when a workflow needs repeat checks with consistent timing and control over stop conditions.
-
-Main methods:
-
-- `start()`
-- `startWithAbort()`
-- `abort()`
-
-Example:
-
-```ts
-import { PollingHelper } from "bytekit/polling-helper";
-
-const poller = new PollingHelper(
-  () => fetchJobStatus(),
-  {
-    interval: 5000,
-    maxAttempts: 20,
-    stopCondition: (result) => result.status === "done",
-  }
-);
-
-const result = await poller.start();
-```
-
-## `CompressionUtils`, `DiffUtils`, and file upload helpers
-
-These modules are useful when you need:
-
-- payload compression or decompression
-- deep comparisons between objects or arrays
-- upload flows with helper abstractions
-
-Prefer their narrow entrypoints when you only need one concern.
+<CardGroup cols={2}>
+  <Card title="EnvManager" icon="gear" href="/api-reference/env-manager">
+    Environment variable access across runtimes.
+  </Card>
+  <Card title="StorageUtils" icon="database" href="/api-reference/storage-utils">
+    Browser and storage-related helpers.
+  </Card>
+  <Card title="FileUploadHelper" icon="upload" href="/api-reference/file-upload-helper">
+    Upload-oriented helpers and abstractions.
+  </Card>
+  <Card title="StreamingHelper" icon="water" href="/api-reference/streaming-helper">
+    NDJSON, SSE, and streamed downloads.
+  </Card>
+  <Card title="WebSocketHelper" icon="plug" href="/api-reference/websocket-helper">
+    WebSocket connection and messaging helpers.
+  </Card>
+  <Card title="CacheManager" icon="box-archive" href="/api-reference/cache-manager">
+    Generic cache strategies with memory and persistent storage.
+  </Card>
+  <Card title="CompressionUtils" icon="file-zipper" href="/api-reference/compression-utils">
+    Compress and decompress data.
+  </Card>
+  <Card title="CryptoUtils" icon="lock" href="/api-reference/crypto-utils">
+    Hashing, HMAC, UUID, and secure token helpers.
+  </Card>
+  <Card title="DiffUtils" icon="code-compare" href="/api-reference/diff-utils">
+    Object and array diffing.
+  </Card>
+  <Card title="EventEmitter" icon="bolt" href="/api-reference/event-emitter">
+    Typed event bus primitives.
+  </Card>
+  <Card title="PollingHelper" icon="arrows-rotate" href="/api-reference/polling-helper">
+    Polling workflows with backoff, jitter, and lifecycle hooks.
+  </Card>
+  <Card title="UrlHelper" icon="link" href="/api-reference/url-helper">
+    URL parsing, building, query-string manipulation, and slugification.
+  </Card>
+</CardGroup>
 
 <Note>
-  These helpers are intentionally modular. Most apps only need a small subset, so prefer the narrow entrypoint for each use case.
+  These helpers are intentionally modular. Most apps only need a small subset — use the narrow entrypoint for each concern to keep bundle size minimal.
 </Note>

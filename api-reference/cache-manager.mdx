@@ -1,28 +1,183 @@
 ---
 title: "CacheManager"
-description: "Class reference and examples for CacheManager."
+description: "In-memory cache with TTL, LRU eviction, optional localStorage persistence, and hit-rate statistics."
 ---
 
 ## Import
 
 ```ts
-import { CacheManager } from "bytekit/cache-manager";
+import { CacheManager, createCacheManager } from "bytekit/cache-manager";
 ```
 
-## Common options
+## What it does
 
-- `defaultTTL`
-- `maxMemorySize`
-- `enableLocalStorage`
+`CacheManager` provides a generic in-memory cache with time-to-live (TTL) expiration, LRU eviction when `maxSize` is reached, optional `localStorage` persistence, and built-in hit/miss statistics. Use it to cache expensive computations, API responses, or any data that benefits from short-lived memoization.
 
-## Example
+## Constructor
 
 ```ts
-const cache = new CacheManager({
-  defaultTTL: 60_000,
-  maxMemorySize: 100,
-  enableLocalStorage: true,
-});
-
-const stats = await cache.getOrCompute("dashboard-stats", loadStats);
+const cache = new CacheManager(config?: CacheManagerConfig);
 ```
+
+### `CacheManagerConfig`
+
+| Property | Type | Default | Description |
+| --- | --- | --- | --- |
+| `defaultTTL` | `number` | `60000` | Default time-to-live in ms. |
+| `maxSize` | `number` | `1000` | Maximum number of entries before LRU eviction. |
+| `maxMemorySize` | `number` | — | Optional memory budget in bytes (approximate). |
+| `enableLocalStorage` | `boolean` | `false` | Persist cache entries to `localStorage`. |
+| `storagePrefix` | `string` | — | Key prefix when `enableLocalStorage` is `true`. |
+
+## Factory
+
+```ts
+const cache = createCacheManager({ defaultTTL: 30_000, maxSize: 500 });
+```
+
+Convenience function that returns a new `CacheManager` instance.
+
+## Methods
+
+### `get<T>(key)`
+
+```ts
+const user = cache.get<User>("user:42");
+```
+
+Returns the cached value or `undefined` if the key is missing or expired.
+
+### `set<T>(key, value, options?)`
+
+```ts
+cache.set("user:42", userData, { ttl: 120_000 });
+```
+
+Stores a value. An optional per-entry `ttl` overrides `defaultTTL`.
+
+| Parameter | Type | Description |
+| --- | --- | --- |
+| `key` | `string` | Cache key. |
+| `value` | `T` | Value to store. |
+| `options` | `{ ttl?: number }` | Optional per-entry TTL in ms. |
+
+### `getOrCompute<T>(key, fn, options?)`
+
+```ts
+const profile = await cache.getOrCompute("profile:42", async () => {
+  return fetchProfile(42);
+}, { ttl: 60_000 });
+```
+
+Returns the cached value if present; otherwise calls `fn`, caches the result, and returns it. Useful for stale-while-revalidate patterns.
+
+### `delete(key)`
+
+```ts
+cache.delete("user:42"); // true if the key existed
+```
+
+Removes a single entry. Returns `true` if the key was found.
+
+### `has(key)`
+
+```ts
+if (cache.has("user:42")) {
+  // ...
+}
+```
+
+Returns `true` if the key exists and has not expired.
+
+### `clear()`
+
+```ts
+cache.clear();
+```
+
+Removes all entries from the cache.
+
+### `size()`
+
+```ts
+console.log(`Entries: ${cache.size()}`);
+```
+
+Returns the current number of cached entries.
+
+### `keys()`
+
+```ts
+const allKeys = cache.keys();
+```
+
+Returns an array of all active (non-expired) cache keys.
+
+### `stats()`
+
+```ts
+const { hits, misses, size, hitRate, memoryUsage } = cache.stats();
+console.log(`Hit rate: ${(hitRate * 100).toFixed(1)}%`);
+```
+
+Returns cache performance statistics.
+
+| Property | Type | Description |
+| --- | --- | --- |
+| `hits` | `number` | Total cache hits. |
+| `misses` | `number` | Total cache misses. |
+| `size` | `number` | Current entry count. |
+| `hitRate` | `number` | Ratio of hits to total lookups (0–1). |
+| `memoryUsage` | `number` | Approximate memory usage in bytes. |
+
+## Examples
+
+### Basic TTL cache
+
+```ts
+import { CacheManager } from "bytekit/cache-manager";
+
+const cache = new CacheManager({ defaultTTL: 30_000, maxSize: 200 });
+
+cache.set("token", "abc123");
+console.log(cache.get("token")); // "abc123"
+
+// After 30 seconds…
+console.log(cache.get("token")); // undefined
+```
+
+### Compute-on-miss pattern
+
+```ts
+import { createCacheManager } from "bytekit/cache-manager";
+
+const cache = createCacheManager({ defaultTTL: 60_000 });
+
+async function getUser(id: number) {
+  return cache.getOrCompute(`user:${id}`, () => fetchUser(id));
+}
+```
+
+### Monitoring cache performance
+
+```ts
+import { CacheManager } from "bytekit/cache-manager";
+
+const cache = new CacheManager({ maxSize: 500 });
+
+// After some usage…
+const { hitRate, size, memoryUsage } = cache.stats();
+console.log(`Size: ${size}, Hit rate: ${(hitRate * 100).toFixed(1)}%, Memory: ${memoryUsage} bytes`);
+```
+
+<Info>
+  When `maxSize` is reached, the least-recently-used entry is evicted to make room for new ones. This ensures the cache stays within its configured bounds.
+</Info>
+
+<Tip>
+  Use `getOrCompute` instead of manual `get` / `set` sequences to avoid cache stampedes — concurrent callers for the same key will reuse the same computation.
+</Tip>
+
+<Warning>
+  `enableLocalStorage` serializes values with `JSON.stringify`. Non-serializable values (functions, circular references) will fail silently or lose fidelity.
+</Warning>

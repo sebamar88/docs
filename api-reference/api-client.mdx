@@ -1,30 +1,43 @@
 ---
 title: "ApiClient"
-description: "Class reference and examples for ApiClient."
+description: "The core HTTP client class in ByteKit — typed requests, interceptors, retries, circuit breaker, and response validation."
 ---
 
 ## Import
 
 ```ts
-import { ApiClient } from "bytekit/api-client";
+import { ApiClient, ApiError, createApiClient } from "bytekit/api-client";
 ```
 
 ## What it does
 
-`ApiClient` is the main request abstraction in ByteKit. It wraps `fetch` with timeouts, interceptors, retries, circuit breaker support, localized errors, and optional response validation.
+`ApiClient` is the main request abstraction in ByteKit. It wraps the Fetch API with timeouts, request/response interceptors, automatic retries, circuit breaker protection, localized error messages, and optional response validation through built-in schemas or external libraries like Zod and Valibot.
 
-## Common constructor options
+## Constructor
 
-- `baseUrl` or `baseURL`
-- `defaultHeaders`
-- `timeoutMs`
-- `interceptors`
-- `logger`
-- `retryPolicy`
-- `circuitBreaker`
-- `locale`
+```ts
+const api = new ApiClient(config: ApiClientConfig);
+```
 
-## Typical setup
+### `ApiClientConfig`
+
+| Property | Type | Default | Description |
+| --- | --- | --- | --- |
+| `baseUrl` | `string \| URL` | — | **Required.** Base URL for all requests. Alias: `baseURL`. |
+| `defaultHeaders` | `HeadersInit` | `{}` | Headers sent with every request. |
+| `timeoutMs` | `number` | `15000` | Request timeout in milliseconds. |
+| `locale` | `"en" \| "es"` | `"es"` | Locale for built-in error messages. |
+| `interceptors` | `ApiClientInterceptors` | — | Request and response interceptor functions. |
+| `disableInterceptors` | `boolean` | `false` | Disable all interceptors. |
+| `logger` | `Logger` | — | Logger instance for request/error logging. |
+| `retryPolicy` | `RetryConfig` | — | Retry configuration (see [RetryPolicy](/api-reference/retry-policy)). |
+| `circuitBreaker` | `CircuitBreakerConfig` | — | Circuit breaker configuration (see [CircuitBreaker](/api-reference/circuit-breaker)). |
+| `fetchImpl` | `typeof fetch` | `globalThis.fetch` | Custom fetch implementation. |
+| `errorMessages` | `Record<Locale, Record<number, string>>` | Built-in | Override default error messages per status code and locale. |
+| `logHeaders` | `boolean` | `false` | Include headers in log output. |
+| `redactHeaderKeys` | `string[]` | Auth/cookie keys | Header keys to redact from logs. |
+
+## Basic setup
 
 ```ts
 const api = new ApiClient({
@@ -36,24 +49,57 @@ const api = new ApiClient({
 });
 ```
 
-## Common methods
+## Methods
 
-- `get(path, options?)`
-- `post(path, bodyOrOptions?)`
-- `put(path, bodyOrOptions?)`
-- `patch(path, bodyOrOptions?)`
-- `delete(path, options?)`
-- `getList(path, options?)`
+### HTTP verbs
 
-## Example: typed GET
+| Method | Signature | Description |
+| --- | --- | --- |
+| `get` | `get<T>(path, options?): Promise<T>` | GET request. |
+| `post` | `post<T>(path, bodyOrOptions?): Promise<T>` | POST request. Accepts a body directly or `RequestOptions`. |
+| `put` | `put<T>(path, bodyOrOptions?): Promise<T>` | PUT request. Same flexibility as `post`. |
+| `patch` | `patch<T>(path, bodyOrOptions?): Promise<T>` | PATCH request. Same flexibility as `post`. |
+| `delete` | `delete<T>(path, options?): Promise<T>` | DELETE request. |
+| `getList` | `getList<T>(path, options?): Promise<PaginatedResponse<T>>` | GET with built-in pagination, sorting, and filters. |
+
+<Tip>
+  `post`, `put`, and `patch` accept either a plain body object or a full `RequestOptions` object with a `body` property — whichever is more convenient.
+</Tip>
+
+### `RequestOptions<T>`
+
+| Property | Type | Description |
+| --- | --- | --- |
+| `searchParams` | `Record<string, QueryParam>` | Query string parameters. |
+| `headers` | `HeadersInit` | Per-request headers (merged with defaults). |
+| `timeoutMs` | `number` | Override the client-level timeout. |
+| `validateResponse` | `ValidationSchema \| SchemaAdapter<T>` | Validate the response body. |
+| `signal` | `AbortSignal` | Cancellation signal. |
+| `skipRetry` | `boolean` | Skip retry policy for this request. |
+| `skipInterceptors` | `boolean` | Skip interceptors for this request. |
+| `body` | `FormData \| string \| Record<string, unknown>` | Request body (when using options form). |
+
+### `ListOptions<T>`
+
+Extends `RequestOptions` with pagination, sorting, and filter helpers.
+
+| Property | Type | Description |
+| --- | --- | --- |
+| `pagination` | `{ page?, limit?, offset? }` | Pagination parameters. |
+| `sort` | `{ field?, order? }` | Sort field and direction. |
+| `filters` | `Record<string, QueryParam>` | Filter parameters merged into query string. |
+
+## Examples
+
+### Typed GET
 
 ```ts
 type User = { id: number; name: string };
 
-const users = await api.get<User[]>("/users");
+const user = await api.get<User>("/users/1");
 ```
 
-## Example: POST with payload
+### POST with payload
 
 ```ts
 const created = await api.post<{ id: string }>("/users", {
@@ -61,7 +107,44 @@ const created = await api.post<{ id: string }>("/users", {
 });
 ```
 
-## Example: interceptors
+### POST with full options
+
+```ts
+const created = await api.post<{ id: string }>("/users", {
+  body: { name: "Ada Lovelace" },
+  headers: { "X-Idempotency-Key": crypto.randomUUID() },
+});
+```
+
+### Paginated list
+
+```ts
+const result = await api.getList<Product>("/products", {
+  pagination: { page: 1, limit: 20 },
+  sort: { field: "price", order: "desc" },
+  filters: { category: "electronics" },
+});
+
+console.log(result.data);             // Product[]
+console.log(result.pagination.total);  // total count
+```
+
+### Response validation with Zod
+
+```ts
+import { zodAdapter } from "bytekit/schema-adapter";
+import { z } from "zod";
+
+const UserSchema = z.object({ id: z.number(), name: z.string() });
+
+const user = await api.get("/users/1", {
+  validateResponse: zodAdapter(UserSchema),
+});
+```
+
+## Interceptors
+
+Interceptors let you transform requests before they are sent and responses before they are returned.
 
 ```ts
 const api = new ApiClient({
@@ -72,8 +155,50 @@ const api = new ApiClient({
       headers.set("X-Trace-Id", crypto.randomUUID());
       return [url, { ...init, headers }];
     },
+    response: async (response) => {
+      // Log slow responses
+      return response;
+    },
   },
 });
 ```
 
-See also [HTTP client](/api-reference/http-client), [ResponseValidator](/api-reference/response-validator), and [Schema adapters](/api-reference/schema-adapters).
+## `ApiError`
+
+Thrown when a response has a non-2xx status code.
+
+| Property | Type | Description |
+| --- | --- | --- |
+| `status` | `number` | HTTP status code. |
+| `statusText` | `string` | HTTP status text. |
+| `message` | `string` | Localized error message. |
+| `body` | `unknown` | Parsed response body, if available. |
+| `isTimeout` | `boolean` | `true` when the error was caused by a timeout. |
+
+```ts
+try {
+  await api.get("/protected");
+} catch (err) {
+  if (err instanceof ApiError) {
+    console.error(err.status, err.message);
+  }
+}
+```
+
+`ApiError` also exposes a `details` getter, `toJSON()`, and a readable `toString()` for debugging.
+
+## Factory
+
+`createApiClient` is a shortcut for `new ApiClient(config)`.
+
+```ts
+import { createApiClient } from "bytekit/api-client";
+
+const api = createApiClient({
+  baseUrl: "https://api.example.com",
+});
+```
+
+<Note>
+  `ApiClient` requires either `baseUrl` or `baseURL` in the config. An error is thrown at construction time if neither is provided.
+</Note>

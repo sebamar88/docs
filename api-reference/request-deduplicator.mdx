@@ -1,6 +1,6 @@
 ---
 title: "RequestDeduplicator"
-description: "Class reference and examples for RequestDeduplicator."
+description: "Class reference and examples for RequestDeduplicator — shares a single in-flight promise across identical concurrent requests."
 ---
 
 ## Import
@@ -9,25 +9,99 @@ description: "Class reference and examples for RequestDeduplicator."
 import { RequestDeduplicator } from "bytekit/request-deduplicator";
 ```
 
-## What it does
-
-`RequestDeduplicator` shares a single in-flight promise across equivalent requests.
-
-## Example
+## Constructor
 
 ```ts
-const deduplicator = new RequestDeduplicator();
+const dedup = new RequestDeduplicator(config?);
+```
 
-const [a, b] = await Promise.all([
-  deduplicator.execute("/me", () => api.get("/me")),
-  deduplicator.execute("/me", () => api.get("/me")),
+### Config options
+
+| Property | Type | Default | Description |
+| --- | --- | --- | --- |
+| `keyGenerator` | `(key: string) => string` | — | Custom function to normalize or transform deduplication keys |
+
+## Methods
+
+| Method | Returns | Description |
+| --- | --- | --- |
+| `execute<T>(key, fn, options?)` | `Promise<T>` | Runs `fn` once per unique in-flight key. Concurrent calls with the same key receive the same promise. |
+| `getStats()` | `DeduplicatorStats` | Returns deduplication counters |
+| `getInFlightCount()` | `number` | Number of requests currently in progress |
+| `clear()` | `void` | Cancels tracking of all in-flight keys |
+| `resetStats()` | `void` | Resets hit counters to zero |
+
+### `getStats` return value
+
+| Property | Type | Description |
+| --- | --- | --- |
+| `deduplicatedCount` | `number` | Number of calls that reused an existing in-flight promise |
+| `totalRequests` | `number` | Total number of `execute` calls |
+
+## Examples
+
+### Deduplicate parallel fetches
+
+When multiple UI components mount at the same time and each requests the current user, only one network call is made.
+
+```ts
+import { ApiClient } from "bytekit/api-client";
+import { RequestDeduplicator } from "bytekit/request-deduplicator";
+
+const api = new ApiClient({ baseUrl: "https://api.example.com" });
+const dedup = new RequestDeduplicator();
+
+// Both calls share a single HTTP request
+const [sidebar, header] = await Promise.all([
+  dedup.execute("/me", () => api.get("/me")),
+  dedup.execute("/me", () => api.get("/me")),
 ]);
 ```
 
-## Main methods
+### Custom key generator
 
-- `execute(url, fn, options?)`
-- `getStats()`
-- `getInFlightCount()`
-- `clear()`
-- `resetStats()`
+```ts
+const dedup = new RequestDeduplicator({
+  keyGenerator: (key) => key.toLowerCase().replace(/\/+$/, ""),
+});
+
+// These resolve to the same in-flight request
+dedup.execute("/Users/1", () => api.get("/users/1"));
+dedup.execute("/users/1/", () => api.get("/users/1"));
+```
+
+### Monitoring deduplication
+
+```ts
+const stats = dedup.getStats();
+console.log(`Saved ${stats.deduplicatedCount} redundant requests`);
+console.log(`Total calls: ${stats.totalRequests}`);
+console.log(`In-flight right now: ${dedup.getInFlightCount()}`);
+```
+
+### Integration with ApiClient interceptors
+
+```ts
+const dedup = new RequestDeduplicator();
+
+const api = new ApiClient({
+  baseUrl: "https://api.example.com",
+  interceptors: {
+    request: async (url, init) => {
+      // Only deduplicate GET requests
+      if (init.method === "GET") {
+        return dedup.execute(url, () => [url, init]);
+      }
+      return [url, init];
+    },
+  },
+});
+```
+
+<Tip>
+  Combine `RequestDeduplicator` with [RequestCache](/api-reference/request-cache) for maximum efficiency: the deduplicator collapses concurrent in-flight calls, while the cache serves repeated reads from memory.
+</Tip>
+
+<Note>
+  Once the underlying promise settles, the next `execute` call with the same key will invoke `fn` again. Deduplication only applies while the original call is still in flight.
+</Note>

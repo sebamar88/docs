@@ -1,6 +1,6 @@
 ---
 title: "CryptoUtils"
-description: "Reference and examples for CryptoUtils."
+description: "Hashing, encryption, tokens, UUIDs, Base64, and constant-time comparison utilities."
 ---
 
 ## Import
@@ -9,18 +9,186 @@ description: "Reference and examples for CryptoUtils."
 import { CryptoUtils } from "bytekit/crypto-utils";
 ```
 
-## Common tasks
+## What it does
 
-- `generateToken(length?)`
-- `generateUUID()`
-- `hash(str, algorithm?)`
-- `hmac(message, secret, algorithm?)`
-- `verifyHash(str, hash, algorithm?)`
+`CryptoUtils` exposes **static** methods for common cryptographic and encoding operations: secure token generation, UUID v4, Base64 encoding/decoding (standard and URL-safe), hashing (simple and SubtleCrypto-based), HMAC, AES-256-GCM encryption/decryption, and constant-time string comparison.
 
-## Example
+<Warning>
+  `simpleHash` is a fast 32-bit hash intended for non-security use cases (hash maps, fingerprinting). For security-sensitive hashing use `hash()` or `hmac()`.
+</Warning>
+
+## Methods
+
+### `generateToken(length?)`
 
 ```ts
-const token = CryptoUtils.generateToken(32);
-const uuid = CryptoUtils.generateUUID();
-const hash = await CryptoUtils.hash("payload");
+const token = CryptoUtils.generateToken(64);
+// "a3f1…" (128 hex characters)
 ```
+
+Generates a cryptographically random hex token.
+
+| Parameter | Type | Default | Description |
+| --- | --- | --- | --- |
+| `length` | `number` | `32` | Number of random bytes (output is `length * 2` hex chars). |
+
+### `generateUUID()`
+
+```ts
+const id = CryptoUtils.generateUUID();
+// "550e8400-e29b-41d4-a716-446655440000"
+```
+
+Returns a random UUID v4 string.
+
+### `base64Encode(str)`
+
+```ts
+const encoded = CryptoUtils.base64Encode("Hello, world!");
+```
+
+Encodes a string to standard Base64.
+
+### `base64Decode(str)`
+
+```ts
+const decoded = CryptoUtils.base64Decode(encoded);
+```
+
+Decodes a standard Base64 string.
+
+### `base64UrlEncode(str)`
+
+```ts
+const safe = CryptoUtils.base64UrlEncode(payload);
+```
+
+Encodes a string to URL-safe Base64 (replaces `+/` with `-_`, strips `=`).
+
+### `base64UrlDecode(str)`
+
+```ts
+const decoded = CryptoUtils.base64UrlDecode(safe);
+```
+
+Decodes a URL-safe Base64 string.
+
+### `simpleHash(str)`
+
+```ts
+const hash = CryptoUtils.simpleHash("cache-key-123");
+```
+
+Returns a fast, **non-cryptographic** 32-bit hash string. Suitable for cache keys or bucketing.
+
+### `hash(str, algorithm?)`
+
+```ts
+const digest = await CryptoUtils.hash("sensitive-data", "SHA-512");
+```
+
+Computes a cryptographic hash using the SubtleCrypto API.
+
+| Parameter | Type | Default | Description |
+| --- | --- | --- | --- |
+| `str` | `string` | — | Input string. |
+| `algorithm` | `string` | `"SHA-256"` | Hash algorithm (`SHA-1`, `SHA-256`, `SHA-384`, `SHA-512`). |
+
+### `hmac(message, secret, algorithm?)`
+
+```ts
+const signature = await CryptoUtils.hmac(payload, webhookSecret, "SHA-256");
+```
+
+Computes an HMAC digest.
+
+| Parameter | Type | Default | Description |
+| --- | --- | --- | --- |
+| `message` | `string` | — | Message to sign. |
+| `secret` | `string` | — | HMAC secret key. |
+| `algorithm` | `string` | `"SHA-256"` | Hash algorithm. |
+
+### `verifyHash(str, hash, algorithm?)`
+
+```ts
+const valid = await CryptoUtils.verifyHash("data", expectedHash, "SHA-256");
+```
+
+Hashes `str` and compares it to `hash`. Returns `true` if they match.
+
+### `encrypt(str, key)`
+
+```ts
+const ciphertext = await CryptoUtils.encrypt("secret message", encryptionKey);
+```
+
+Encrypts a string using AES-256-GCM. The returned string includes the IV and auth tag, so it is self-contained.
+
+### `decrypt(encrypted, key)`
+
+```ts
+const plaintext = await CryptoUtils.decrypt(ciphertext, encryptionKey);
+```
+
+Decrypts a string previously encrypted with `encrypt`.
+
+### `randomBytes(length)`
+
+```ts
+const bytes = CryptoUtils.randomBytes(16);
+```
+
+Returns a `Uint8Array` of cryptographically random bytes.
+
+### `constantTimeCompare(a, b)`
+
+```ts
+const match = CryptoUtils.constantTimeCompare(provided, expected);
+```
+
+Compares two strings in constant time to prevent timing attacks. Returns `true` if they are equal.
+
+## Examples
+
+### Webhook signature verification
+
+```ts
+import { CryptoUtils } from "bytekit/crypto-utils";
+
+async function verifyWebhook(body: string, signature: string, secret: string) {
+  const expected = await CryptoUtils.hmac(body, secret, "SHA-256");
+  return CryptoUtils.constantTimeCompare(signature, expected);
+}
+```
+
+### Token-based authentication
+
+```ts
+import { CryptoUtils } from "bytekit/crypto-utils";
+
+const sessionToken = CryptoUtils.generateToken(32);
+const hashedToken = await CryptoUtils.hash(sessionToken, "SHA-256");
+
+// Store `hashedToken` in the database
+// Send `sessionToken` to the client
+```
+
+### Encrypt sensitive data at rest
+
+```ts
+import { CryptoUtils } from "bytekit/crypto-utils";
+
+const key = CryptoUtils.generateToken(32);
+
+const encrypted = await CryptoUtils.encrypt("SSN: 123-45-6789", key);
+const decrypted = await CryptoUtils.decrypt(encrypted, key);
+// "SSN: 123-45-6789"
+```
+
+<Tip>
+  Use `constantTimeCompare` whenever you compare tokens, signatures, or hashes to prevent timing side-channel attacks.
+</Tip>
+
+<Note>
+  Async methods (`hash`, `hmac`, `encrypt`, `decrypt`, `verifyHash`) use the Web Crypto API (`SubtleCrypto`) and require a secure context (HTTPS) in browsers.
+</Note>

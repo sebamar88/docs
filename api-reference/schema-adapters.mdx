@@ -1,9 +1,9 @@
 ---
 title: "Schema adapters"
-description: "Use zodAdapter and valibotAdapter with ApiClient."
+description: "Plug Zod or Valibot schemas into ApiClient response validation with zodAdapter and valibotAdapter."
 ---
 
-## Imports
+## Import
 
 ```ts
 import { zodAdapter, valibotAdapter } from "bytekit/schema-adapter";
@@ -11,37 +11,80 @@ import { zodAdapter, valibotAdapter } from "bytekit/schema-adapter";
 
 ## What they do
 
-Schema adapters let `ApiClient` validate responses through external schema libraries while keeping the request API consistent.
+Schema adapters wrap external validation libraries into a `SchemaAdapter<T>` interface so you can pass them to `ApiClient`'s `validateResponse` option. The client calls `adapter.parse(data)` after every successful response — if parsing fails, the error propagates immediately.
 
-## Zod example
+### `SchemaAdapter<T>`
 
 ```ts
-import { ApiClient } from "bytekit";
+interface SchemaAdapter<T> {
+  parse: (data: unknown) => T;
+}
+```
+
+Any object that satisfies this interface works as a response validator. `zodAdapter` and `valibotAdapter` are convenience wrappers for the two most popular schema libraries.
+
+## `zodAdapter`
+
+```ts
+function zodAdapter<T>(schema: { parse: (data: unknown) => T }): SchemaAdapter<T>;
+```
+
+Wraps a Zod schema. Since Zod schemas already expose a `parse` method, you can also pass a Zod schema directly — the adapter simply adds type safety.
+
+| Parameter | Type | Description |
+| --- | --- | --- |
+| `schema` | Zod schema with `.parse()` | Any Zod schema object. |
+
+### Zod example
+
+```ts
+import { ApiClient } from "bytekit/api-client";
 import { zodAdapter } from "bytekit/schema-adapter";
 import { z } from "zod";
 
 const UserSchema = z.object({
   id: z.number(),
   name: z.string(),
+  email: z.string().email(),
 });
+
+type User = z.infer<typeof UserSchema>;
 
 const api = new ApiClient({ baseUrl: "https://api.example.com" });
 
-const user = await api.get("/users/1", {
+const user = await api.get<User>("/users/1", {
   validateResponse: zodAdapter(UserSchema),
 });
+// user is fully typed and runtime-validated
 ```
 
-## Valibot example
+## `valibotAdapter`
 
 ```ts
-import { ApiClient } from "bytekit";
+function valibotAdapter<T>(
+  schema: unknown,
+  parseFn: (schema: unknown, data: unknown) => T,
+): SchemaAdapter<T>;
+```
+
+Wraps a Valibot schema and its `parse` function. Unlike Zod, Valibot separates the schema definition from the parse function, so both must be provided.
+
+| Parameter | Type | Description |
+| --- | --- | --- |
+| `schema` | Valibot schema | The schema definition. |
+| `parseFn` | `(schema, data) => T` | Valibot's `parse` function. |
+
+### Valibot example
+
+```ts
+import { ApiClient } from "bytekit/api-client";
 import { valibotAdapter } from "bytekit/schema-adapter";
 import { object, string, number, parse } from "valibot";
 
 const UserSchema = object({
   id: number(),
   name: string(),
+  email: string(),
 });
 
 const api = new ApiClient({ baseUrl: "https://api.example.com" });
@@ -50,3 +93,38 @@ const user = await api.get("/users/1", {
   validateResponse: valibotAdapter(UserSchema, parse),
 });
 ```
+
+## Type guard
+
+```ts
+import { isSchemaAdapter } from "bytekit/schema-adapter";
+
+if (isSchemaAdapter(maybeAdapter)) {
+  const parsed = maybeAdapter.parse(rawData);
+}
+```
+
+`isSchemaAdapter(obj)` returns `true` if the object has a `parse` function — useful when you accept both `ValidationSchema` and `SchemaAdapter` in generic code.
+
+## Comparison
+
+<AccordionGroup>
+  <Accordion title="When to use zodAdapter">
+    - You already use Zod in your project
+    - You want `.parse()` + `.safeParse()` error messages
+    - You need transforms (`.transform()`, `.default()`, `.refine()`)
+  </Accordion>
+  <Accordion title="When to use valibotAdapter">
+    - You prefer Valibot's tree-shakeable, functional API
+    - You want a smaller bundle footprint for validation
+  </Accordion>
+  <Accordion title="When to use ResponseValidator instead">
+    - You want zero external dependencies
+    - You only need structural type checks and simple constraints
+    - See [ResponseValidator](/api-reference/response-validator)
+  </Accordion>
+</AccordionGroup>
+
+<Note>
+  Schema adapters are optional. If you don't pass `validateResponse`, `ApiClient` returns the raw parsed JSON without validation.
+</Note>

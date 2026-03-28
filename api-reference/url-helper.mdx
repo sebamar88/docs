@@ -1,0 +1,121 @@
+---
+title: "UrlHelper"
+description: "Static utilities for URL parsing, building, query-string manipulation, and slugification."
+---
+
+## Import
+
+```ts
+import { UrlHelper } from "bytekit/url-helper";
+```
+
+## What it does
+
+`UrlHelper` is a collection of static methods for working with URLs: parsing, building, joining, normalizing, encoding, and query-string manipulation. All methods are pure functions with no side effects.
+
+## Methods
+
+### Parsing and building
+
+| Method | Signature | Description |
+| --- | --- | --- |
+| `parse` | `parse(url: string): ParsedUrl` | Decompose a URL into its components. |
+| `build` | `build(parts: ParsedUrl): string` | Build a URL string from parts. |
+| `resolve` | `resolve(base: string, relative: string): string` | Resolve a relative URL against a base. |
+| `join` | `join(...parts: string[]): string` | Join path segments into a single URL path. |
+
+### Query-string helpers
+
+| Method | Signature | Description |
+| --- | --- | --- |
+| `getQueryParams` | `getQueryParams(url: string): Record<string, string>` | Extract query parameters as a key-value map. |
+| `setQueryParams` | `setQueryParams(url: string, params: Record<string, string>): string` | Replace all query parameters on a URL. |
+| `addQueryParam` | `addQueryParam(url: string, key: string, value: string): string` | Append a single query parameter. |
+| `removeQueryParam` | `removeQueryParam(url: string, key: string): string` | Remove a query parameter by key. |
+| `stringify` | `stringify(params: Record<string, string>): string` | Serialize a params object to a query string. |
+
+### Validation and normalization
+
+| Method | Signature | Description |
+| --- | --- | --- |
+| `isAbsolute` | `isAbsolute(url: string): boolean` | Check whether a URL is absolute. |
+| `isValid` | `isValid(url: string): boolean` | Check whether a string is a valid URL. |
+| `normalize` | `normalize(url: string): string` | Normalize a URL (trailing slashes, encoding). |
+
+### Encoding
+
+| Method | Signature | Description |
+| --- | --- | --- |
+| `encode` | `encode(str: string): string` | Percent-encode a string for use in a URL. |
+| `decode` | `decode(str: string): string` | Decode a percent-encoded string. |
+
+### Path extraction
+
+| Method | Signature | Description |
+| --- | --- | --- |
+| `getExtension` | `getExtension(url: string): string` | Extract the file extension from a URL path. |
+| `getFilename` | `getFilename(url: string): string` | Extract the filename from a URL path. |
+
+### Text utilities
+
+| Method | Signature | Description |
+| --- | --- | --- |
+| `slugify` | `slugify(text: string): string` | Convert text into a URL-safe slug. |
+
+## Examples
+
+### Parse and rebuild
+
+```ts
+import { UrlHelper } from "bytekit/url-helper";
+
+const parts = UrlHelper.parse("https://example.com/api/users?page=2");
+// { protocol: 'https', host: 'example.com', path: '/api/users', query: 'page=2', ... }
+
+const url = UrlHelper.build(parts);
+// "https://example.com/api/users?page=2"
+```
+
+### Query-string manipulation
+
+```ts
+const url = "https://example.com/search?q=hello";
+
+const withLimit = UrlHelper.addQueryParam(url, "limit", "10");
+// "https://example.com/search?q=hello&limit=10"
+
+const params = UrlHelper.getQueryParams(withLimit);
+// { q: "hello", limit: "10" }
+
+const clean = UrlHelper.removeQueryParam(withLimit, "limit");
+// "https://example.com/search?q=hello"
+```
+
+### Join and resolve
+
+```ts
+const endpoint = UrlHelper.join("https://api.example.com", "v2", "users");
+// "https://api.example.com/v2/users"
+
+const full = UrlHelper.resolve("https://example.com/docs/", "../api");
+// "https://example.com/api"
+```
+
+### Slugify
+
+```ts
+const slug = UrlHelper.slugify("Hello World — Special Characters!");
+// "hello-world-special-characters"
+```
+
+### Validation
+
+```ts
+UrlHelper.isValid("https://example.com"); // true
+UrlHelper.isValid("not a url");           // false
+UrlHelper.isAbsolute("/relative/path");   // false
+```
+
+<Note>
+  All methods are static — there is no need to instantiate `UrlHelper`.
+</Note>

@@ -1,42 +1,230 @@
 ---
 title: "ErrorBoundary"
-description: "Reference for ErrorBoundary and ByteKit error types."
+description: "Structured error handling, automatic normalization, retries, and typed error classes for your application."
 ---
 
 ## Import
 
 ```ts
-import { ErrorBoundary, AppError } from "bytekit/error-boundary";
+import {
+  ErrorBoundary,
+  AppError,
+  AppValidationError,
+  NotFoundError,
+  UnauthorizedError,
+  ForbiddenError,
+  ConflictError,
+  RateLimitError,
+  TimeoutError,
+  getGlobalErrorBoundary,
+  resetGlobalErrorBoundary,
+} from "bytekit/error-boundary";
 ```
 
-## Main exports
+## What it does
 
-- `ErrorBoundary`
-- `AppError`
-- `AppValidationError`
-- `NotFoundError`
-- `UnauthorizedError`
-- `ForbiddenError`
-- `ConflictError`
-- `RateLimitError`
-- `TimeoutError`
+`ErrorBoundary` provides a centralized place to handle, normalize, retry, and log errors. Plain `Error` instances are automatically converted into typed `AppError` subclasses using keyword detection, so you always work with structured errors that carry a status code, error code, and context.
 
-## Example
+## `ErrorBoundary`
+
+### Constructor
 
 ```ts
+const boundary = new ErrorBoundary(config?: ErrorBoundaryConfig);
+```
+
+#### `ErrorBoundaryConfig`
+
+| Property | Type | Default | Description |
+| --- | --- | --- | --- |
+| `logger` | `Logger` | — | Logger instance for error output. |
+| `maxRetries` | `number` | `3` | Max retries for `execute()`. |
+| `retryDelay` | `number` | `1000` | Delay between retries (ms). |
+| `handlers` | `ErrorHandler[]` | `[]` | Initial error handler functions. |
+| `onError` | `(error, context) => void` | — | Callback invoked on every error. |
+| `onErrorRecovery` | `(error, context) => void` | — | Callback invoked on successful recovery. |
+| `isDevelopment` | `boolean` | — | Enables extra diagnostics in dev mode. |
+
+### Methods
+
+| Method | Signature | Description |
+| --- | --- | --- |
+| `handle` | `handle(error, context?): Promise<void>` | Normalize, log, and dispatch to all handlers. |
+| `execute` | `execute<T>(fn, context?, retries?): Promise<T>` | Run async function with error handling and retries. |
+| `executeSync` | `executeSync<T>(fn, context?): T` | Run sync function with error handling. |
+| `wrap` | `wrap<T>(fn, context?): T` | Return a wrapped version of an async function that handles errors. |
+| `wrapSync` | `wrapSync<T>(fn, context?): T` | Return a wrapped version of a sync function that handles errors. |
+| `addHandler` | `addHandler(handler): void` | Register an error handler. |
+| `removeHandler` | `removeHandler(handler): void` | Remove a registered handler. |
+| `clearHandlers` | `clearHandlers(): void` | Remove all handlers. |
+| `getErrorHistory` | `getErrorHistory(limit?): ErrorRecord[]` | Get recent errors (default last 10). |
+| `clearErrorHistory` | `clearErrorHistory(): void` | Clear the error history stack. |
+| `createErrorReport` | `createErrorReport(): ErrorReport` | Generate a timestamped report of all recorded errors. |
+
+### `ErrorContext`
+
+| Property | Type | Description |
+| --- | --- | --- |
+| `component` | `string` | Component or module name. |
+| `context` | `string` | Free-form context string. |
+| `userId` | `string` | User identifier. |
+| `sessionId` | `string` | Session identifier. |
+| `metadata` | `Record<string, unknown>` | Arbitrary metadata. |
+| `originalError` | `Error` | The original error before normalization. |
+
+## Error classes
+
+All error classes extend `AppError`, which extends `Error`.
+
+### `AppError`
+
+```ts
+new AppError(code, message, statusCode?, context?, originalError?)
+```
+
+| Property | Type | Description |
+| --- | --- | --- |
+| `code` | `string` | Machine-readable error code (e.g. `"NOT_FOUND"`). |
+| `message` | `string` | Human-readable message. |
+| `statusCode` | `number` | HTTP status code (default `500`). |
+| `context` | `ErrorContext` | Additional context. |
+| `originalError` | `Error` | The original error, if normalized. |
+
+### Typed error subclasses
+
+| Class | Code | Status | Notes |
+| --- | --- | --- | --- |
+| `AppValidationError` | `VALIDATION_ERROR` | `400` | Validation failures. |
+| `UnauthorizedError` | `UNAUTHORIZED` | `401` | Authentication required. |
+| `ForbiddenError` | `FORBIDDEN` | `403` | Insufficient permissions. |
+| `NotFoundError` | `NOT_FOUND` | `404` | Resource not found. |
+| `TimeoutError` | `TIMEOUT` | `408` | Operation timed out. |
+| `ConflictError` | `CONFLICT` | `409` | Resource conflict. |
+| `RateLimitError` | `RATE_LIMIT` | `429` | Too many requests. Accepts optional `retryAfter` (stored in `metadata`). |
+
+## Automatic error normalization
+
+When `ErrorBoundary` receives a plain `Error`, it inspects the message and converts it to the closest typed subclass:
+
+| Keyword in message | Normalized to |
+| --- | --- |
+| `"timeout"` / `"Timeout"` | `TimeoutError` |
+| `"validation"` / `"Validation"` | `AppValidationError` |
+| `"not found"` / `"Not Found"` | `NotFoundError` |
+| _(anything else)_ | `AppError` with code `UNKNOWN_ERROR` |
+
+## Retryable errors
+
+`ErrorBoundary.execute()` automatically retries when `isRetryable` returns `true`:
+
+- Status `408` (timeout)
+- Status `429` (rate limit)
+- Status `5xx` (server errors)
+
+Non-retryable errors (like `400`, `401`, `403`, `404`, `409`) fail immediately without retrying.
+
+## Examples
+
+### Basic error handling
+
+```ts
+import { ErrorBoundary } from "bytekit/error-boundary";
+
 const boundary = new ErrorBoundary({
   maxRetries: 2,
   retryDelay: 500,
 });
 
 const data = await boundary.execute(
-  () => fetchProfile(),
-  { context: "profile-load" }
+  () => fetchUserProfile(userId),
+  { context: "profile-load", userId },
 );
 ```
 
-## Main methods
+### Wrapping functions
 
-- `handle(error, context?)`
-- `execute(fn, context?)`
-- `executeSync(fn, context?)`
+```ts
+const safeFetch = boundary.wrap(
+  async (id: string) => api.get(`/users/${id}`),
+  { component: "UserService" },
+);
+
+// Errors are automatically caught, normalized, and dispatched
+const user = await safeFetch("123");
+```
+
+### Custom error handlers
+
+```ts
+const boundary = new ErrorBoundary({
+  onError: (error, context) => {
+    analytics.track("error", {
+      code: error instanceof AppError ? error.code : "UNKNOWN",
+      component: context.component,
+    });
+  },
+  handlers: [
+    async (error, context) => {
+      if (error instanceof RateLimitError) {
+        showToast("Too many requests — please wait.");
+      }
+    },
+  ],
+});
+```
+
+### Throwing typed errors
+
+```ts
+import { NotFoundError, AppValidationError } from "bytekit/error-boundary";
+
+function getUser(id: string) {
+  const user = db.find(id);
+  if (!user) throw new NotFoundError(`User ${id} not found`);
+  return user;
+}
+
+function createUser(data: unknown) {
+  if (!data || typeof data !== "object") {
+    throw new AppValidationError("Invalid user data");
+  }
+  // ...
+}
+```
+
+### Error report
+
+```ts
+const report = boundary.createErrorReport();
+console.log(report);
+// {
+//   timestamp: "2026-03-27T...",
+//   errors: [
+//     { code: "NOT_FOUND", message: "...", statusCode: 404, ... },
+//   ],
+// }
+```
+
+## Global error boundary
+
+A singleton `ErrorBoundary` for app-wide error handling:
+
+```ts
+import {
+  getGlobalErrorBoundary,
+  resetGlobalErrorBoundary,
+} from "bytekit/error-boundary";
+
+const boundary = getGlobalErrorBoundary({ maxRetries: 2 });
+
+// Reset the global instance (e.g. in tests)
+resetGlobalErrorBoundary();
+```
+
+<Note>
+  `getGlobalErrorBoundary()` returns the same instance on every call. Pass a config only on the first call — subsequent calls ignore the config argument.
+</Note>
+
+<Warning>
+  The global boundary registers `unhandledrejection` and `onerror` listeners automatically. Call `resetGlobalErrorBoundary()` in test teardown to avoid listener leaks.
+</Warning>

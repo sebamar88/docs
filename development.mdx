@@ -19,13 +19,21 @@ This page is for contributors who edit the ByteKit docs site itself.
 
 ## Run the docs site locally
 
-Start the local preview from the root of this docs repo and open the local docs URL in your browser.
+Start the local preview from the root of this docs repo:
 
-The site usually runs at `http://localhost:3000`.
+```bash
+mintlify dev
+```
+
+The site runs at `http://localhost:3000`.
 
 ## Validate before you publish
 
-Run the broken-link validation step after moving pages, renaming slugs, or editing navigation.
+Run the broken-link validation after moving pages, renaming slugs, or editing navigation:
+
+```bash
+mintlify broken-links
+```
 
 ## Keep docs aligned with the package
 

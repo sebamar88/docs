@@ -1,6 +1,6 @@
 ---
 title: "Streaming and realtime"
-description: "Process NDJSON, server-sent events, and streamed downloads."
+description: "Process NDJSON, server-sent events (including POST + AbortSignal via fetchSSE), and streamed downloads."
 ---
 
 ## Stream JSON Lines
@@ -22,7 +22,7 @@ const result = await StreamingHelper.streamJsonLines<LogEntry>(
   {
     timeout: 60_000,
     onChunk: (chunk) => {
-      console.log("received", chunk.id);
+      console.log("received", chunk);
     },
     onComplete: () => {
       console.log("stream finished");
@@ -31,17 +31,64 @@ const result = await StreamingHelper.streamJsonLines<LogEntry>(
 );
 ```
 
-## Subscribe to server-sent events
+## Consume SSE with `fetchSSE` (recommended)
+
+`fetchSSE` is a **fetch-based** SSE consumer that supports **any HTTP method**, **request bodies**, **`AbortSignal`**, **multiple event types**, and returns an **`AsyncGenerator`** so you can use `for await … of`.
+
+<Tip>
+  Use `fetchSSE` instead of `streamSSE` whenever you need POST requests, request bodies, cancellation, or multiple event types. `streamSSE` (EventSource-based) remains available for simple GET-only SSE.
+</Tip>
+
+### POST with body and cancellation
 
 ```ts
 import { StreamingHelper } from "bytekit";
 
-interface PriceUpdate {
-  symbol: string;
-  price: number;
+interface TokenChunk {
+  token: string;
+  done: boolean;
 }
 
-const stream = StreamingHelper.streamSSE<PriceUpdate>(
+const ac = new AbortController();
+
+for await (const ev of StreamingHelper.fetchSSE<TokenChunk>(
+  "/bff/ai/orchestrator-stream",
+  {
+    method: "POST",
+    body: { prompt: "Explain DDD", model: "gpt-4o" },
+    signal: ac.signal,
+    eventTypes: ["data", "log", "heartbeat"],
+  }
+)) {
+  if (ev.event === "data") {
+    const chunk = ev.data as TokenChunk;
+    process.stdout.write(chunk.token);
+    if (chunk.done) break;
+  }
+}
+```
+
+### Filter by event type
+
+Pass `eventTypes` to restrict which SSE event types are yielded. Omit it to receive all events.
+
+```ts
+for await (const ev of StreamingHelper.fetchSSE<{ price: number }>(
+  "https://api.example.com/stock/stream",
+  { eventTypes: ["price-update"] }
+)) {
+  console.log(`Price: $${(ev.data as { price: number }).price}`);
+}
+```
+
+## Legacy SSE with `streamSSE`
+
+For simple GET endpoints where you don't need POST, body, or `for await`, the EventSource-based API still works:
+
+```ts
+import { StreamingHelper } from "bytekit";
+
+const stream = StreamingHelper.streamSSE<{ symbol: string; price: number }>(
   "https://api.example.com/prices",
   {
     onError: (error) => console.error(error),
@@ -53,6 +100,7 @@ const unsubscribe = stream.subscribe((data) => {
   console.log(`${data.symbol}: ${data.price}`);
 });
 
+// Later:
 // unsubscribe();
 // stream.close();
 ```
@@ -72,9 +120,19 @@ const blob = await StreamingHelper.downloadStream(
 );
 ```
 
+## When to use which method
+
+| Need | Method |
+| --- | --- |
+| NDJSON / JSON lines | `streamJsonLines` |
+| SSE with POST, body, abort, multi-event | **`fetchSSE`** |
+| SSE with simple GET (legacy) | `streamSSE` |
+| File download with progress | `downloadStream` |
+
 ## Best practices
 
+- Use `fetchSSE` for any SSE endpoint that requires POST or cancellation.
+- Pass an `AbortSignal` to cancel long-lived streams when components unmount.
 - Set explicit timeouts for long-lived streams.
-- Release subscriptions when your component unmounts.
 - Process chunks incrementally if the dataset is large.
-- Keep error handling close to reconnection or recovery logic.
+- Filter with `eventTypes` to ignore keep-alive or debug events you don't need.

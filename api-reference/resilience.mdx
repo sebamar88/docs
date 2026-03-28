@@ -1,231 +1,57 @@
 ---
 title: "Resilience"
-description: "Reference for retries, circuit breaking, caching, deduplication, rate limiting, and error boundaries."
+description: "Overview of ByteKit resilience primitives — retries, circuit breaking, caching, deduplication, rate limiting, and error boundaries."
 ---
 
-## Module entrypoints
+## What this group covers
 
-- `bytekit/retry-policy`
-- `bytekit/request-cache`
-- `bytekit/request-deduplicator`
-- `bytekit/rate-limiter`
-- `bytekit/error-boundary`
+Use these modules when an integration can fail, slow down, duplicate itself, or overwhelm a remote service. Each module targets one concern; combine them for production-grade resilience.
 
-## How these modules fit together
+<CardGroup cols={2}>
+  <Card title="RetryPolicy" icon="rotate" href="/api-reference/retry-policy">
+    Configurable retry logic with exponential backoff and custom predicates.
+  </Card>
+  <Card title="CircuitBreaker" icon="toggle-on" href="/api-reference/circuit-breaker">
+    Stop hammering unstable dependencies with automatic open/half-open/closed transitions.
+  </Card>
+  <Card title="RequestCache" icon="box-archive" href="/api-reference/request-cache">
+    Cache request results with TTL and stale-while-revalidate support.
+  </Card>
+  <Card title="RequestDeduplicator" icon="clone" href="/api-reference/request-deduplicator">
+    Share a single in-flight promise across equivalent concurrent requests.
+  </Card>
+  <Card title="RateLimiter" icon="gauge-high" href="/api-reference/rate-limiter">
+    Token bucket and sliding window limiters for outbound request control.
+  </Card>
+  <Card title="ErrorBoundary" icon="shield-halved" href="/api-reference/error-boundary">
+    Centralized error normalization, retries, and boundary utilities.
+  </Card>
+</CardGroup>
 
-Use this layer when an integration can fail, slow down, duplicate itself, or overwhelm a remote service.
-
-- `RetryPolicy` retries transient failures
-- `CircuitBreaker` stops hammering unstable dependencies
-- `RequestCache` reuses successful results
-- `RequestDeduplicator` shares one in-flight operation
-- `RateLimiter` controls outbound request volume
-- `ErrorBoundary` centralizes error normalization and retries around arbitrary code
-
-## `RetryPolicy`
-
-Encapsulates retry behavior for transient failures.
-
-### Config
-
-| Option | Purpose |
-| --- | --- |
-| `maxAttempts` | Maximum retry attempts |
-| `initialDelayMs` | Starting delay between attempts |
-| `maxDelayMs` | Delay cap |
-| `backoffMultiplier` | Exponential growth factor |
-| `shouldRetry` | Custom retry predicate |
-
-### Main method
-
-- `execute(fn)` runs an async operation with the configured policy.
-
-### Example
+## Quick example: combining primitives
 
 ```ts
-import { RetryPolicy } from "bytekit/retry-policy";
+import { ApiClient } from "bytekit/api-client";
+import { RequestCache, RateLimiter } from "bytekit";
 
-const retryPolicy = new RetryPolicy({
-  maxAttempts: 3,
-  initialDelayMs: 200,
-  maxDelayMs: 5000,
-  backoffMultiplier: 2,
+const api = new ApiClient({
+  baseUrl: "https://api.example.com",
+  retryPolicy: { maxAttempts: 3, initialDelayMs: 200 },
+  circuitBreaker: { failureThreshold: 5, timeoutMs: 30_000 },
 });
 
-const result = await retryPolicy.execute(() => fetchData());
-```
-
-## `CircuitBreaker`
-
-Protects your app from repeatedly calling an unstable dependency.
-
-### Config
-
-| Option | Purpose |
-| --- | --- |
-| `failureThreshold` | Open after this many failures |
-| `successThreshold` | Close again after enough successful probes |
-| `timeoutMs` | Wait time before half-open retry |
-| `errorMessageFormatter` | Custom open-circuit error message |
-
-### Main methods
-
-- `execute(fn)`
-- `getState()`
-- `reset()`
-
-### Example
-
-```ts
-import { CircuitBreaker } from "bytekit/retry-policy";
-
-const breaker = new CircuitBreaker({
-  failureThreshold: 5,
-  timeoutMs: 30_000,
-});
-
-const payload = await breaker.execute(() => fetchCriticalData());
-```
-
-## `RequestCache`
-
-Simple cache for request results.
-
-### Config
-
-| Option | Purpose |
-| --- | --- |
-| `ttl` | Fresh lifetime |
-| `staleWhileRevalidate` | Stale grace period |
-| `keyGenerator` | Custom key strategy |
-
-### Main methods
-
-- `get(url, options?)`
-- `set(url, data, ttl?, options?)`
-- `isStale(url, options?)`
-- `invalidate(url, options?)`
-- `invalidatePattern(pattern)`
-- `clear()`
-- `getStats()`
-- `prune()`
-
-### Example
-
-```ts
-import { ApiClient, RequestCache } from "bytekit";
-
-const api = new ApiClient({ baseUrl: "https://api.example.com" });
-const cache = new RequestCache({
-  ttl: 60_000,
-  staleWhileRevalidate: 15_000,
-});
+const cache = new RequestCache({ ttl: 60_000, staleWhileRevalidate: 15_000 });
+const limiter = new RateLimiter({ maxRequests: 20, windowMs: 60_000 });
 
 async function getCatalog() {
   const cached = cache.get("/catalog");
   if (cached) return cached;
 
+  await limiter.waitForAllowance("/catalog");
   const fresh = await api.get("/catalog");
   cache.set("/catalog", fresh);
   return fresh;
 }
-```
-
-## `RequestDeduplicator`
-
-Shares the same in-flight promise across equivalent requests.
-
-### Main methods
-
-- `execute(url, fn, options?)`
-- `getStats()`
-- `getInFlightCount()`
-- `clear()`
-- `resetStats()`
-
-### Example
-
-```ts
-import { ApiClient, RequestDeduplicator } from "bytekit";
-
-const api = new ApiClient({ baseUrl: "https://api.example.com" });
-const deduplicator = new RequestDeduplicator();
-
-const [leftNav, dashboard] = await Promise.all([
-  deduplicator.execute("/me", () => api.get("/me")),
-  deduplicator.execute("/me", () => api.get("/me")),
-]);
-```
-
-## `RateLimiter`
-
-Token bucket limiter for outbound request control.
-
-### Main methods
-
-- `isAllowed(url)`
-- `getStats(url)`
-- `waitForAllowance(url)`
-- `reset(url)`
-- `resetAll()`
-
-### Example
-
-```ts
-import { ApiClient, RateLimiter } from "bytekit";
-
-const limiter = new RateLimiter({
-  maxRequests: 20,
-  windowMs: 60_000,
-});
-
-const api = new ApiClient({
-  baseUrl: "https://api.example.com",
-  interceptors: {
-    request: async (url, init) => {
-      await limiter.waitForAllowance(url);
-      return [url, init];
-    },
-  },
-});
-```
-
-## `SlidingWindowRateLimiter`
-
-Alternative limiter with tighter accuracy and more memory usage.
-
-It exposes the same main control methods as `RateLimiter`.
-
-## `ErrorBoundary`
-
-Use this module when you need centralized error normalization or safer boundaries around failure-prone code paths.
-
-### Useful exports
-
-- `ErrorBoundary`
-- `AppError`
-- `AppValidationError`
-- `NotFoundError`
-- `UnauthorizedError`
-- `ForbiddenError`
-- `ConflictError`
-- `RateLimitError`
-- `TimeoutError`
-
-### Example
-
-```ts
-import { ErrorBoundary } from "bytekit/error-boundary";
-
-const boundary = new ErrorBoundary({
-  maxRetries: 2,
-  retryDelay: 500,
-});
-
-const user = await boundary.execute(
-  () => fetchUserProfile(),
-  { context: "profile-load" }
-);
 ```
 
 <Tip>

@@ -1,16 +1,167 @@
 ---
-title: "Storage utils"
-description: "Reference for storage-related helpers."
+title: "StorageManager"
+description: "Isomorphic key-value storage with automatic prefix namespacing and custom serialization."
 ---
 
 ## Import
 
 ```ts
-import { StorageUtils } from "bytekit/storage-utils";
+import { StorageManager } from "bytekit/storage-utils";
 ```
 
-## Use it for
+## What it does
 
-- browser storage access
-- serialization helpers around storage flows
-- shared storage utilities across app modules
+`StorageManager` provides a unified key-value storage API that works in the browser (`localStorage` / `sessionStorage`) and falls back to an in-memory store in Node.js or environments where the Web Storage API is unavailable. Keys are automatically namespaced with a configurable prefix.
+
+<Info>
+  In Node.js the in-memory fallback behaves identically to the browser API, so your code can run isomorphically without conditional imports.
+</Info>
+
+## Constructor
+
+```ts
+const storage = new StorageManager(config?: StorageManagerConfig);
+```
+
+### `StorageManagerConfig`
+
+| Property | Type | Default | Description |
+| --- | --- | --- | --- |
+| `prefix` | `string` | `""` | Prefix prepended to every key to avoid collisions. |
+| `storage` | `'local' \| 'session'` | `'local'` | Which browser storage backend to use. |
+| `serializer` | `(value: unknown) => string` | `JSON.stringify` | Custom serialization function. |
+| `deserializer` | `(raw: string) => unknown` | `JSON.parse` | Custom deserialization function. |
+
+## Methods
+
+### `get<T>(key)`
+
+```ts
+const user = storage.get<User>("current-user");
+```
+
+Returns the deserialized value for `key`, or `null` if the key does not exist.
+
+| Parameter | Type | Description |
+| --- | --- | --- |
+| `key` | `string` | Storage key (prefix is applied automatically). |
+
+### `set<T>(key, value)`
+
+```ts
+storage.set("current-user", { id: 1, name: "Ada" });
+```
+
+Serializes and stores `value` under `key`.
+
+| Parameter | Type | Description |
+| --- | --- | --- |
+| `key` | `string` | Storage key. |
+| `value` | `T` | Value to store. |
+
+### `remove(key)`
+
+```ts
+storage.remove("current-user");
+```
+
+Deletes the entry for `key`.
+
+### `clear()`
+
+```ts
+storage.clear();
+```
+
+Removes **all** entries managed by this `StorageManager` instance (scoped by `prefix`).
+
+### `has(key)`
+
+```ts
+if (storage.has("token")) {
+  // ...
+}
+```
+
+Returns `true` if `key` exists in storage.
+
+### `keys()`
+
+```ts
+const allKeys = storage.keys();
+```
+
+Returns an array of all keys (without the prefix) stored by this instance.
+
+### `getAll()`
+
+```ts
+const snapshot = storage.getAll();
+// { "current-user": { id: 1, name: "Ada" }, "token": "abc" }
+```
+
+Returns a record of every key-value pair managed by this instance.
+
+### `size()`
+
+```ts
+console.log(`Stored items: ${storage.size()}`);
+```
+
+Returns the number of entries.
+
+## Examples
+
+### Basic session storage
+
+```ts
+import { StorageManager } from "bytekit/storage-utils";
+
+const session = new StorageManager({
+  prefix: "app:",
+  storage: "session",
+});
+
+session.set("lang", "en");
+console.log(session.get<string>("lang")); // "en"
+console.log(session.has("lang"));          // true
+console.log(session.keys());               // ["lang"]
+session.remove("lang");
+```
+
+### Custom serializer for dates
+
+```ts
+import { StorageManager } from "bytekit/storage-utils";
+import superjson from "superjson";
+
+const storage = new StorageManager({
+  prefix: "v2:",
+  serializer: (v) => superjson.stringify(v),
+  deserializer: (s) => superjson.parse(s),
+});
+
+storage.set("createdAt", new Date());
+const date = storage.get<Date>("createdAt"); // Date instance, not a string
+```
+
+### Node.js in-memory usage
+
+```ts
+import { StorageManager } from "bytekit/storage-utils";
+
+const cache = new StorageManager({ prefix: "cache:" });
+
+cache.set("config", { debug: true });
+console.log(cache.size());    // 1
+console.log(cache.getAll());  // { config: { debug: true } }
+cache.clear();
+```
+
+<Tip>
+  Use a unique `prefix` per feature or module to avoid key collisions when multiple parts of your application share the same storage backend.
+</Tip>
+
+<Warning>
+  Browser storage is limited to roughly 5 MB per origin. For larger datasets consider `CacheManager` or IndexedDB.
+</Warning>

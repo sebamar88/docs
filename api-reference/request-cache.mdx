@@ -1,6 +1,6 @@
 ---
 title: "RequestCache"
-description: "Class reference and examples for RequestCache."
+description: "Class reference and examples for RequestCache — a lightweight cache for request results with TTL, stale-while-revalidate, and pattern invalidation."
 ---
 
 ## Import
@@ -9,33 +9,115 @@ description: "Class reference and examples for RequestCache."
 import { RequestCache } from "bytekit/request-cache";
 ```
 
-## Config
+## Constructor
 
-- `ttl`
-- `staleWhileRevalidate`
-- `keyGenerator`
+```ts
+const cache = new RequestCache(config?);
+```
 
-## Example
+### Config options
+
+| Property | Type | Default | Description |
+| --- | --- | --- | --- |
+| `ttl` | `number` | `60000` | Time-to-live in milliseconds for cached entries |
+| `staleWhileRevalidate` | `boolean` | `false` | When `true`, stale entries are returned while a fresh value is being fetched |
+| `keyGenerator` | `(key: string) => string` | — | Custom function to transform cache keys before storage |
+
+## Methods
+
+| Method | Returns | Description |
+| --- | --- | --- |
+| `get<T>(key)` | `T \| undefined` | Returns the cached value or `undefined` if missing or expired |
+| `set<T>(key, value, options?)` | `void` | Stores a value under the given key |
+| `isStale(key)` | `boolean` | Returns `true` when the entry exists but has exceeded its TTL |
+| `invalidate(key)` | `void` | Removes a single entry by key |
+| `invalidatePattern(pattern)` | `void` | Removes all entries whose keys match a `RegExp` |
+| `clear()` | `void` | Removes every entry from the cache |
+| `getStats()` | `CacheStats` | Returns hit/miss counters and the current size |
+| `prune()` | `void` | Removes all expired entries without waiting for a read |
+
+### `set` options
+
+| Property | Type | Default | Description |
+| --- | --- | --- | --- |
+| `ttl` | `number` | Constructor `ttl` | Override the TTL for this specific entry |
+
+### `getStats` return value
+
+| Property | Type | Description |
+| --- | --- | --- |
+| `hits` | `number` | Number of cache hits |
+| `misses` | `number` | Number of cache misses |
+| `size` | `number` | Current number of entries |
+| `hitRate` | `number` | Ratio of hits to total reads (`0`–`1`) |
+
+## Examples
+
+### Basic read-through cache
+
+```ts
+import { ApiClient } from "bytekit/api-client";
+import { RequestCache } from "bytekit/request-cache";
+
+const api = new ApiClient({ baseUrl: "https://api.example.com" });
+const cache = new RequestCache({ ttl: 30_000 });
+
+async function getUser(id: string) {
+  const key = `/users/${id}`;
+  const cached = cache.get<User>(key);
+  if (cached) return cached;
+
+  const user = await api.get<User>(key);
+  cache.set(key, user);
+  return user;
+}
+```
+
+### Per-entry TTL override
+
+```ts
+// Cache rarely-changing config for 5 minutes
+cache.set("app-config", config, { ttl: 300_000 });
+
+// Cache volatile data for 5 seconds
+cache.set("live-price", price, { ttl: 5_000 });
+```
+
+### Pattern invalidation
+
+```ts
+// Invalidate every cached user entry after a bulk update
+cache.invalidatePattern(/^\/users\//);
+```
+
+### Stale-while-revalidate
 
 ```ts
 const cache = new RequestCache({
   ttl: 60_000,
-  staleWhileRevalidate: 15_000,
+  staleWhileRevalidate: true,
 });
 
-const cached = cache.get("/catalog");
-if (!cached) {
-  cache.set("/catalog", await loadCatalog());
+const data = cache.get("dashboard");
+
+if (data && cache.isStale("dashboard")) {
+  // Return stale data immediately, refresh in background
+  refreshDashboard().then((fresh) => cache.set("dashboard", fresh));
 }
 ```
 
-## Main methods
+### Monitoring cache performance
 
-- `get(url, options?)`
-- `set(url, data, ttl?, options?)`
-- `isStale(url, options?)`
-- `invalidate(url, options?)`
-- `invalidatePattern(pattern)`
-- `clear()`
-- `getStats()`
-- `prune()`
+```ts
+const stats = cache.getStats();
+console.log(`Hit rate: ${(stats.hitRate * 100).toFixed(1)}%`);
+console.log(`Entries: ${stats.size}`);
+```
+
+<Tip>
+  Call `prune()` on a timer if you cache many short-lived entries. This keeps memory usage predictable without affecting read performance.
+</Tip>
+
+<Note>
+  `RequestCache` is an in-memory store. For persistent or cross-tab caching, see [CacheManager](/api-reference/cache-manager).
+</Note>

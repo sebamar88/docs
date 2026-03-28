@@ -1,6 +1,6 @@
 ---
 title: "WebSocketHelper"
-description: "Class reference and examples for WebSocketHelper."
+description: "Managed WebSocket connections with automatic reconnection, exponential backoff, and typed events."
 ---
 
 ## Import
@@ -9,21 +9,204 @@ description: "Class reference and examples for WebSocketHelper."
 import { WebSocketHelper } from "bytekit/websocket";
 ```
 
-## Main methods
+## What it does
 
-- `connect()`
-- `send(type, data)`
-- `on(type, handler)`
-- `onError(handler)`
-- `request(type, data, responseType?)`
-- `close()`
-- `isConnected()`
-- `getState()`
+`WebSocketHelper` wraps the native `WebSocket` API with automatic reconnection, exponential backoff, ping/keep-alive, and a typed event system. It handles the full lifecycle — connect, send, reconnect, and graceful disconnect — so you can focus on message handling.
 
-## Example
+## Constructor
 
 ```ts
-const socket = new WebSocketHelper("wss://example.com/socket");
-await socket.connect();
-socket.on("price:update", (payload) => console.log(payload));
+const ws = new WebSocketHelper(url, options?: WebSocketHelperOptions);
 ```
+
+| Parameter | Type | Description |
+| --- | --- | --- |
+| `url` | `string` | WebSocket server URL (e.g. `wss://api.example.com/ws`). |
+| `options` | `WebSocketHelperOptions` | Optional configuration. |
+
+### `WebSocketHelperOptions`
+
+| Property | Type | Default | Description |
+| --- | --- | --- | --- |
+| `protocols` | `string \| string[]` | — | Subprotocols passed to the `WebSocket` constructor. |
+| `reconnect` | `boolean` | `true` | Enable automatic reconnection on close/error. |
+| `maxReconnectAttempts` | `number` | `5` | Maximum reconnection attempts before giving up. |
+| `reconnectInterval` | `number` | `1000` | Initial delay between reconnect attempts (ms). |
+| `reconnectBackoff` | `number` | `1.5` | Multiplier applied to `reconnectInterval` after each attempt. |
+| `maxReconnectInterval` | `number` | `30000` | Upper bound for the reconnect delay (ms). |
+| `pingInterval` | `number` | — | Interval for automatic ping messages (ms). Disabled if omitted. |
+| `pingMessage` | `string \| (() => string)` | — | Payload sent as the ping message. |
+| `onOpen` | `(event: Event) => void` | — | Shortcut handler for the `open` event. |
+| `onMessage` | `(event: MessageEvent) => void` | — | Shortcut handler for the `message` event. |
+| `onClose` | `(event: CloseEvent) => void` | — | Shortcut handler for the `close` event. |
+| `onError` | `(event: Event) => void` | — | Shortcut handler for the `error` event. |
+| `onReconnect` | `(attempt: number) => void` | — | Called on each reconnection attempt. |
+| `serializer` | `(data: unknown) => string` | `JSON.stringify` | Serializer for `sendJSON`. |
+| `deserializer` | `(raw: string) => unknown` | `JSON.parse` | Deserializer for incoming messages. |
+
+## Methods
+
+### `connect()`
+
+```ts
+ws.connect();
+```
+
+Opens the WebSocket connection. Safe to call multiple times — no-ops if already connected.
+
+### `disconnect(code?, reason?)`
+
+```ts
+ws.disconnect(1000, "User navigated away");
+```
+
+Closes the connection and stops reconnection attempts.
+
+| Parameter | Type | Default | Description |
+| --- | --- | --- | --- |
+| `code` | `number` | `1000` | WebSocket close code. |
+| `reason` | `string` | — | Human-readable close reason. |
+
+### `send(data)`
+
+```ts
+ws.send("ping");
+```
+
+Sends a raw string or `ArrayBuffer` through the socket.
+
+### `sendJSON(data)`
+
+```ts
+ws.sendJSON({ type: "subscribe", channel: "trades" });
+```
+
+Serializes `data` with the configured `serializer` and sends it.
+
+### `on(event, handler)`
+
+```ts
+const unsub = ws.on("message", (payload) => {
+  console.log("Received:", payload);
+});
+
+// Later…
+unsub();
+```
+
+Registers an event handler and returns an **unsubscribe** function.
+
+### `off(event, handler)`
+
+```ts
+ws.off("message", handler);
+```
+
+Removes a previously registered handler.
+
+### `waitForConnection(timeout?)`
+
+```ts
+await ws.waitForConnection(5000);
+ws.sendJSON({ type: "hello" });
+```
+
+Returns a promise that resolves when the socket enters the `open` state, or rejects after `timeout` ms.
+
+### `getState()`
+
+```ts
+const state = ws.getState();
+// "connecting" | "open" | "closing" | "closed"
+```
+
+Returns the current connection state.
+
+### `getReconnectAttempts()`
+
+```ts
+console.log(`Reconnect attempts: ${ws.getReconnectAttempts()}`);
+```
+
+Returns the number of reconnect attempts since the last successful connection.
+
+### `isConnected()`
+
+```ts
+if (ws.isConnected()) {
+  ws.sendJSON(message);
+}
+```
+
+Returns `true` if the socket is in the `open` state.
+
+## Events
+
+| Event | Payload | Description |
+| --- | --- | --- |
+| `open` | `Event` | Connection established. |
+| `message` | `MessageEvent` | Message received. |
+| `close` | `CloseEvent` | Connection closed. |
+| `error` | `Event` | Connection error. |
+| `reconnect` | `number` (attempt) | Reconnection attempt started. |
+| `reconnect_failed` | — | All reconnection attempts exhausted. |
+
+## Examples
+
+### Real-time notifications
+
+```ts
+import { WebSocketHelper } from "bytekit/websocket";
+
+const ws = new WebSocketHelper("wss://api.example.com/notifications", {
+  reconnect: true,
+  maxReconnectAttempts: 10,
+  reconnectBackoff: 2,
+  onOpen: () => console.log("Connected"),
+  onReconnect: (attempt) => console.log(`Reconnecting (${attempt})…`),
+});
+
+ws.on("message", (event) => {
+  const notification = JSON.parse(event.data);
+  showToast(notification.title);
+});
+
+ws.connect();
+```
+
+### JSON messaging with auto-serialization
+
+```ts
+import { WebSocketHelper } from "bytekit/websocket";
+
+const ws = new WebSocketHelper("wss://api.example.com/ws", {
+  pingInterval: 30_000,
+  pingMessage: JSON.stringify({ type: "ping" }),
+});
+
+ws.connect();
+
+await ws.waitForConnection(5000);
+ws.sendJSON({ type: "subscribe", channel: "orderbook" });
+
+ws.on("message", (event) => {
+  const msg = JSON.parse(event.data);
+  if (msg.type === "snapshot") renderOrderbook(msg.data);
+});
+```
+
+### Graceful shutdown
+
+```ts
+window.addEventListener("beforeunload", () => {
+  ws.disconnect(1000, "Page unload");
+});
+```
+
+<Tip>
+  Use `waitForConnection` after calling `connect()` to safely queue messages without worrying about the socket state.
+</Tip>
+
+<Warning>
+  When `reconnect` is `true`, the helper will attempt to reconnect on unexpected closures. Call `disconnect()` explicitly to stop reconnection and close the connection cleanly.
+</Warning>

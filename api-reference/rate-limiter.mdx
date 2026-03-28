@@ -1,6 +1,6 @@
 ---
 title: "RateLimiter"
-description: "Reference for RateLimiter and SlidingWindowRateLimiter."
+description: "Class reference and examples for RateLimiter and SlidingWindowRateLimiter — outbound request throttling with fixed and sliding window strategies."
 ---
 
 ## Import
@@ -11,27 +11,155 @@ import { RateLimiter, SlidingWindowRateLimiter } from "bytekit/rate-limiter";
 
 ## `RateLimiter`
 
-Token bucket limiter for outbound request control.
+Fixed-window rate limiter. Counts requests within discrete time windows and rejects calls that exceed the limit.
+
+### Constructor
+
+```ts
+const limiter = new RateLimiter(config);
+```
+
+### Config options
+
+| Property | Type | Default | Description |
+| --- | --- | --- | --- |
+| `maxRequests` | `number` | — | Maximum number of allowed requests per window |
+| `windowMs` | `number` | — | Window duration in milliseconds |
+
+### Methods
+
+| Method | Returns | Description |
+| --- | --- | --- |
+| `isAllowed(key?)` | `boolean` | Returns `true` if the request is within the limit |
+| `getStats(key?)` | `RateLimiterStats` | Returns current window counters |
+| `waitForAllowance(key?)` | `Promise<void>` | Resolves when the next request is allowed |
+| `reset(key?)` | `void` | Resets the counter for a specific key |
+| `resetAll()` | `void` | Resets all counters across every key |
+
+### `getStats` return value
+
+| Property | Type | Description |
+| --- | --- | --- |
+| `remaining` | `number` | Requests still allowed in the current window |
+| `resetAt` | `number` | Timestamp (ms) when the window resets |
+| `total` | `number` | Total requests recorded in the current window |
 
 ### Example
 
 ```ts
+import { RateLimiter } from "bytekit/rate-limiter";
+
+const limiter = new RateLimiter({
+  maxRequests: 100,
+  windowMs: 60_000,
+});
+
+if (limiter.isAllowed()) {
+  await fetchData();
+} else {
+  const { remaining, resetAt } = limiter.getStats();
+  console.log(`Rate limited. Resets at ${new Date(resetAt).toISOString()}`);
+}
+```
+
+### Await allowance before sending
+
+```ts
+import { ApiClient } from "bytekit/api-client";
+import { RateLimiter } from "bytekit/rate-limiter";
+
 const limiter = new RateLimiter({
   maxRequests: 20,
   windowMs: 60_000,
 });
 
-await limiter.waitForAllowance("https://api.example.com/users");
+const api = new ApiClient({
+  baseUrl: "https://api.example.com",
+  interceptors: {
+    request: async (url, init) => {
+      await limiter.waitForAllowance(url);
+      return [url, init];
+    },
+  },
+});
 ```
 
-### Main methods
-
-- `isAllowed(url)`
-- `getStats(url)`
-- `waitForAllowance(url)`
-- `reset(url)`
-- `resetAll()`
+---
 
 ## `SlidingWindowRateLimiter`
 
-Alternative limiter with tighter rate accounting and more memory usage.
+Sliding-window variant that tracks individual request timestamps instead of a simple counter. This prevents the burst problem at window boundaries that fixed-window limiters can exhibit.
+
+### Constructor
+
+```ts
+const limiter = new SlidingWindowRateLimiter(config);
+```
+
+### Config options
+
+| Property | Type | Default | Description |
+| --- | --- | --- | --- |
+| `maxRequests` | `number` | — | Maximum number of allowed requests per window |
+| `windowMs` | `number` | — | Window duration in milliseconds |
+
+### Methods
+
+The sliding window limiter exposes the same API as `RateLimiter`:
+
+| Method | Returns | Description |
+| --- | --- | --- |
+| `isAllowed(key?)` | `boolean` | Returns `true` if the request is within the limit |
+| `getStats(key?)` | `RateLimiterStats` | Returns current window counters |
+| `waitForAllowance(key?)` | `Promise<void>` | Resolves when the next request is allowed |
+| `reset(key?)` | `void` | Resets the counter for a specific key |
+| `resetAll()` | `void` | Resets all counters across every key |
+
+### Example
+
+```ts
+import { SlidingWindowRateLimiter } from "bytekit/rate-limiter";
+
+const limiter = new SlidingWindowRateLimiter({
+  maxRequests: 10,
+  windowMs: 1_000,
+});
+
+async function throttledFetch(url: string) {
+  await limiter.waitForAllowance(url);
+  return fetch(url);
+}
+```
+
+## Choosing a strategy
+
+<AccordionGroup>
+  <Accordion title="When to use RateLimiter (fixed window)">
+    Best for simple throughput caps where occasional bursts at window edges are acceptable. Lower memory overhead.
+  </Accordion>
+  <Accordion title="When to use SlidingWindowRateLimiter">
+    Best when you need accurate, even distribution of requests over time. Prevents the "double burst" at window boundaries. Uses slightly more memory because it stores individual timestamps.
+  </Accordion>
+</AccordionGroup>
+
+<Warning>
+  Both limiters are in-memory and per-process. They do not coordinate across multiple server instances or browser tabs.
+</Warning>
+
+### Per-key rate limiting
+
+Both classes accept an optional `key` parameter on every method. This lets you apply separate limits per endpoint, per user, or per any other dimension.
+
+```ts
+const limiter = new RateLimiter({
+  maxRequests: 5,
+  windowMs: 10_000,
+});
+
+// Each endpoint gets its own counter
+await limiter.waitForAllowance("/search");
+await limiter.waitForAllowance("/export");
+
+const searchStats = limiter.getStats("/search");
+const exportStats = limiter.getStats("/export");
+```

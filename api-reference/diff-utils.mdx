@@ -1,6 +1,6 @@
 ---
 title: "DiffUtils"
-description: "Reference and examples for DiffUtils."
+description: "Deep and shallow object diffing, array comparison, patching, and human-readable diff formatting."
 ---
 
 ## Import
@@ -9,8 +9,170 @@ description: "Reference and examples for DiffUtils."
 import { DiffUtils } from "bytekit/diff-utils";
 ```
 
-## Use it for
+## What it does
 
-- deep object comparisons
-- array diffs
-- change tracking between snapshots
+`DiffUtils` provides **static** methods for comparing objects and arrays, generating structured diff results, and applying or reverting patches. It supports deep and shallow comparison, array-level diffing, diff merging, and human-readable formatting.
+
+## Methods
+
+### `deepDiff(a, b)`
+
+```ts
+const diffs = DiffUtils.deepDiff(oldConfig, newConfig);
+```
+
+Recursively compares two values and returns an array of `DiffResult` entries describing every difference at any depth.
+
+| Parameter | Type | Description |
+| --- | --- | --- |
+| `a` | `unknown` | Original value. |
+| `b` | `unknown` | New value. |
+
+### `shallowDiff(a, b)`
+
+```ts
+const diffs = DiffUtils.shallowDiff(prevProps, nextProps);
+```
+
+Compares two objects at the top level only (no recursion into nested objects).
+
+### `arrayDiff(a, b)`
+
+```ts
+const { added, removed, common } = DiffUtils.arrayDiff(oldTags, newTags);
+```
+
+Compares two arrays and returns an `ArrayDiffResult`.
+
+### `patch(original, diffs)`
+
+```ts
+const updated = DiffUtils.patch(original, diffs);
+```
+
+Applies an array of `DiffResult` entries to `original`, returning the patched value.
+
+### `unpatch(patched, diffs)`
+
+```ts
+const original = DiffUtils.unpatch(patched, diffs);
+```
+
+Reverts a patch, restoring the value to its pre-diff state.
+
+### `mergeDiffs(diffs1, diffs2)`
+
+```ts
+const merged = DiffUtils.mergeDiffs(serverDiffs, localDiffs);
+```
+
+Merges two diff arrays into a single consolidated diff.
+
+### `hasDifferences(a, b)`
+
+```ts
+if (DiffUtils.hasDifferences(saved, current)) {
+  enableSaveButton();
+}
+```
+
+Returns `true` if the two values differ (deep comparison). A fast boolean check when you don't need the full diff.
+
+### `diffSummary(diffs)`
+
+```ts
+const summary = DiffUtils.diffSummary(diffs);
+// { added: 2, removed: 1, changed: 3, unchanged: 10, total: 16 }
+```
+
+Returns aggregate counts from a diff array.
+
+| Property | Type | Description |
+| --- | --- | --- |
+| `added` | `number` | Number of added properties. |
+| `removed` | `number` | Number of removed properties. |
+| `changed` | `number` | Number of changed properties. |
+| `unchanged` | `number` | Number of unchanged properties. |
+| `total` | `number` | Total properties compared. |
+
+### `formatDiff(diffs)`
+
+```ts
+console.log(DiffUtils.formatDiff(diffs));
+```
+
+Returns a human-readable string representation of the diff array — useful for logging or debugging.
+
+## Types
+
+### `DiffResult`
+
+| Property | Type | Description |
+| --- | --- | --- |
+| `path` | `string` | Dot-notation path to the changed property (e.g. `"user.address.city"`). |
+| `type` | `'added' \| 'removed' \| 'changed' \| 'unchanged'` | Kind of difference. |
+| `oldValue` | `unknown` | Previous value (present for `changed` and `removed`). |
+| `newValue` | `unknown` | New value (present for `changed` and `added`). |
+
+### `ArrayDiffResult`
+
+| Property | Type | Description |
+| --- | --- | --- |
+| `added` | `unknown[]` | Items present in `b` but not in `a`. |
+| `removed` | `unknown[]` | Items present in `a` but not in `b`. |
+| `common` | `unknown[]` | Items present in both arrays. |
+
+## Examples
+
+### Detect and log config changes
+
+```ts
+import { DiffUtils } from "bytekit/diff-utils";
+
+const diffs = DiffUtils.deepDiff(previousConfig, currentConfig);
+
+if (diffs.length > 0) {
+  console.log("Config changed:");
+  console.log(DiffUtils.formatDiff(diffs));
+
+  const summary = DiffUtils.diffSummary(diffs);
+  console.log(`${summary.changed} changed, ${summary.added} added, ${summary.removed} removed`);
+}
+```
+
+### Undo / redo with patch and unpatch
+
+```ts
+import { DiffUtils } from "bytekit/diff-utils";
+
+// Capture the diff when the user makes an edit
+const diffs = DiffUtils.deepDiff(prevState, nextState);
+undoStack.push(diffs);
+
+// Undo
+const lastDiffs = undoStack.pop();
+const restored = DiffUtils.unpatch(currentState, lastDiffs);
+
+// Redo
+const reapplied = DiffUtils.patch(restored, lastDiffs);
+```
+
+### Dirty-form detection
+
+```ts
+import { DiffUtils } from "bytekit/diff-utils";
+
+const initialValues = form.getInitialValues();
+const currentValues = form.getValues();
+
+const isDirty = DiffUtils.hasDifferences(initialValues, currentValues);
+saveButton.disabled = !isDirty;
+```
+
+<Tip>
+  Use `hasDifferences` for quick boolean checks. It short-circuits on the first difference and is faster than computing the full diff.
+</Tip>
+
+<Warning>
+  `shallowDiff` only compares top-level properties. Nested objects are compared by reference, not by value. Use `deepDiff` when you need full structural comparison.
+</Warning>

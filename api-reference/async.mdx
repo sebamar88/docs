@@ -1,141 +1,288 @@
 ---
 title: "Async"
-description: "Reference for ByteKit async utilities and flow-control helpers."
+description: "Complete reference for ByteKit async utilities — timing, retries, concurrency, debounce, throttle, and flow control."
 ---
 
-## Module entrypoint
+## Import
 
-- `bytekit/async`
+```ts
+import {
+  sleep,
+  timeout,
+  withTimeout,
+  retry,
+  parallel,
+  sequential,
+  race,
+  allSettled,
+  debounceAsync,
+  throttleAsync,
+  TimeoutError,
+  AbortError,
+  RetryError,
+} from "bytekit/async";
+```
 
 ## What this module is for
 
-Use `bytekit/async` when you need control over timing, retries, and concurrency outside the HTTP client itself.
+Use `bytekit/async` when you need control over timing, retries, concurrency, and flow control outside the HTTP client itself. Every export is a standalone function — no classes to instantiate.
+
+---
 
 ## Timing
 
-| Export | Purpose |
-| --- | --- |
-| `sleep(ms, signal?)` | Delay execution with optional abort support |
-| `timeout(promise, ms, message?)` | Add a timeout to a promise |
-| `withTimeout(fn, ms, message?)` | Wrap a function with timeout behavior |
+### `sleep`
 
-### Example: timeout around a promise
+Delay execution for a given number of milliseconds. Supports an optional `AbortSignal`.
 
 ```ts
-import { timeout } from "bytekit/async";
+await sleep(1000);
 
-const report = await timeout(fetchReport(), 5000);
+// With abort support
+const controller = new AbortController();
+await sleep(5000, controller.signal);
 ```
 
-## Retry and execution control
+### `timeout`
 
-| Export | Purpose |
-| --- | --- |
-| `retry(fn, options?)` | Retry a failed async operation |
-| `debounceAsync(fn, waitOrOptions)` | Debounce an async function |
-| `throttleAsync(fn, waitOrOptions)` | Throttle an async function |
-
-### Example: retry a flaky operation
+Add a deadline to any promise. Throws `TimeoutError` if the promise does not settle in time.
 
 ```ts
-import { retry } from "bytekit/async";
+const data = await timeout(fetchReport(), 5000);
 
-const payload = await retry(() => fetchData(), {
+// Custom error message
+const data = await timeout(fetchReport(), 5000, "Report fetch timed out");
+```
+
+### `withTimeout`
+
+Wrap a function so every call has a built-in timeout.
+
+```ts
+const safeFetch = withTimeout(fetchReport, 5000);
+const data = await safeFetch(reportId);
+```
+
+---
+
+## Retry
+
+### `retry`
+
+Retry a failed async operation with configurable backoff.
+
+```ts
+const data = await retry(() => fetchData(), {
   maxAttempts: 5,
   baseDelay: 1000,
   backoff: "exponential",
 });
 ```
 
-### Example: debounce async search
+#### `RetryOptions`
+
+| Option | Type | Default | Description |
+| --- | --- | --- | --- |
+| `maxAttempts` | `number` | `3` | Maximum number of attempts. |
+| `baseDelay` | `number` | `1000` | Starting delay between retries (ms). |
+| `maxDelay` | `number` | `Infinity` | Maximum delay cap (ms). |
+| `backoff` | `"exponential" \| "linear" \| (attempt: number) => number` | `"exponential"` | Backoff strategy or custom function. |
+| `shouldRetry` | `(error: Error) => boolean` | — | Predicate to decide whether to retry. |
+| `signal` | `AbortSignal` | — | Cancellation signal. |
+
+### Backoff strategies
 
 ```ts
-import { debounceAsync } from "bytekit/async";
+// Exponential (default): 1s → 2s → 4s → 8s ...
+await retry(fn, { backoff: "exponential" });
 
-const debouncedSearch = debounceAsync(async (query: string) => {
-  const response = await fetch(`/api/search?q=${query}`);
-  return response.json();
-}, 300);
+// Linear: 1s → 2s → 3s → 4s ...
+await retry(fn, { backoff: "linear" });
+
+// Custom function
+await retry(fn, { backoff: (attempt) => attempt * 500 });
 ```
+
+---
 
 ## Concurrency and coordination
 
-| Export | Purpose |
-| --- | --- |
-| `parallel(tasks, options?)` | Run tasks with optional concurrency limit |
-| `sequential(tasks, options?)` | Run tasks one after another |
-| `race(promises)` | Resolve with the first successful or settled candidate according to module semantics |
-| `allSettled(promises)` | Collect fulfilled and rejected results |
+### `parallel`
 
-### Example: bounded concurrency
+Run async tasks with an optional concurrency limit.
 
 ```ts
-import { parallel } from "bytekit/async";
-
 const results = await parallel(
   files.map((file) => () => uploadFile(file)),
   { concurrency: 5 }
 );
 ```
 
-### Example: multi-source fallback
+#### `ParallelOptions`
 
-```ts
-import { race, sleep } from "bytekit/async";
-
-const result = await race([
-  fetchFromPrimaryRegion(),
-  fetchFromSecondaryRegion(),
-  sleep(5000).then(() => {
-    throw new Error("Timeout");
-  }),
-]);
-```
-
-## Error types
-
-The async module also exposes specialized error classes:
-
-- `TimeoutError`
-- `AbortError`
-- `RetryError`
-
-## Typical options
-
-### `retry`
-
-| Option | Purpose |
-| --- | --- |
-| `maxAttempts` | Maximum tries |
-| `baseDelay` | Starting delay |
-| `maxDelay` | Delay cap |
-| `backoff` | `linear`, `exponential`, or custom function |
-| `shouldRetry` | Predicate to keep retrying |
-| `signal` | Abort signal |
-
-### `parallel`
-
-| Option | Purpose |
-| --- | --- |
-| `concurrency` | Number of tasks allowed at once |
+| Option | Type | Description |
+| --- | --- | --- |
+| `concurrency` | `number` | Maximum number of tasks running at once. |
 
 ### `sequential`
 
-| Option | Purpose |
+Run async tasks one after another.
+
+```ts
+const results = await sequential(
+  steps.map((s) => () => processStep(s)),
+  { continueOnError: true }
+);
+```
+
+#### `SequentialOptions`
+
+| Option | Type | Description |
+| --- | --- | --- |
+| `continueOnError` | `boolean` | Keep executing after a task failure. |
+
+### `race`
+
+Enhanced race that resolves with the first successful promise. If every promise rejects, throws an `AggregateError`.
+
+```ts
+const fastest = await race([
+  fetchFromPrimary(),
+  fetchFromSecondary(),
+  sleep(5000).then(() => { throw new Error("Timeout"); }),
+]);
+```
+
+### `allSettled`
+
+Collect all results into `fulfilled` and `rejected` buckets with their original indices.
+
+```ts
+const { fulfilled, rejected } = await allSettled([
+  fetchUser(1),
+  fetchUser(2),
+  fetchUser(999),
+]);
+
+// fulfilled: [{ value: User, index: 0 }, { value: User, index: 1 }]
+// rejected:  [{ reason: Error, index: 2 }]
+```
+
+#### `AllSettledResult<T>`
+
+| Property | Type |
 | --- | --- |
-| `continueOnError` | Keep executing after failures |
+| `fulfilled` | `Array<{ value: T; index: number }>` |
+| `rejected` | `Array<{ reason: unknown; index: number }>` |
+
+---
+
+## Debounce and throttle
+
+### `debounceAsync`
+
+Debounce an async function. Returns a `DebouncedFunction` with `cancel()` and `flush()` methods.
+
+```ts
+const search = debounceAsync(
+  async (query: string) => {
+    const res = await fetch(`/api/search?q=${query}`);
+    return res.json();
+  },
+  300,
+  { leading: false, trailing: true }
+);
+
+// Use it
+const results = await search("bytekit");
+
+// Cancel pending execution
+search.cancel();
+
+// Force immediate execution
+const immediate = await search.flush();
+```
+
+#### `DebounceOptions`
+
+| Option | Type | Description |
+| --- | --- | --- |
+| `leading` | `boolean` | Fire on the leading edge. |
+| `trailing` | `boolean` | Fire on the trailing edge. |
+
+### `throttleAsync`
+
+Throttle an async function. Returns a `ThrottledFunction` with a `cancel()` method.
+
+```ts
+const save = throttleAsync(
+  async (data: FormData) => {
+    await fetch("/api/save", { method: "POST", body: data });
+  },
+  2000,
+  { trailing: true }
+);
+
+save(formData);
+
+// Cancel pending trailing call
+save.cancel();
+```
+
+#### `ThrottleOptions`
+
+| Option | Type | Description |
+| --- | --- | --- |
+| `trailing` | `boolean` | Fire a trailing call after the interval. |
+
+---
+
+## Error classes
+
+### `TimeoutError`
+
+Thrown by `timeout()` and `withTimeout()` when a deadline is exceeded.
+
+| Property | Type | Description |
+| --- | --- | --- |
+| `timeout` | `number` | The timeout value that was exceeded (ms). |
+
+### `AbortError`
+
+Thrown when an operation is cancelled via `AbortSignal`.
+
+### `RetryError`
+
+Thrown when all retry attempts are exhausted.
+
+| Property | Type | Description |
+| --- | --- | --- |
+| `attempts` | `number` | Total attempts executed. |
+| `lastError` | `Error` | The error from the final attempt. |
+
+---
 
 ## Combined example
 
 ```ts
-import { parallel, retry, timeout } from "bytekit/async";
+import { parallel, retry, timeout, debounceAsync, sleep } from "bytekit/async";
 
-const result = await retry(() => timeout(fetchData(), 5000), {
-  maxAttempts: 4,
-  baseDelay: 250,
-});
+// Retry a slow endpoint with a per-call timeout
+const data = await retry(
+  () => timeout(fetchData(), 5000),
+  { maxAttempts: 4, baseDelay: 250 }
+);
 
-const outputs = await parallel(jobs, {
-  concurrency: 3,
-});
+// Upload files with bounded concurrency
+const uploads = await parallel(
+  files.map((f) => () => uploadFile(f)),
+  { concurrency: 3 }
+);
+
+// Debounced search input
+const search = debounceAsync(fetchResults, 300);
 ```
+
+<Note>
+  All timing values are in milliseconds. Functions that accept an `AbortSignal` will throw `AbortError` when the signal fires.
+</Note>

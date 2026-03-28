@@ -1,6 +1,6 @@
 ---
 title: "EnvManager"
-description: "Class reference and examples for EnvManager."
+description: "Class reference and examples for EnvManager — typed, validated access to environment variables with prefix support and defaults."
 ---
 
 ## Import
@@ -9,17 +9,128 @@ description: "Class reference and examples for EnvManager."
 import { EnvManager } from "bytekit/env-manager";
 ```
 
-## Main methods
+## Constructor
 
-- `get(name)`
-- `require(name)`
-- `isProd()`
+```ts
+const env = new EnvManager(config?);
+```
 
-## Example
+### Config options
+
+| Property | Type | Default | Description |
+| --- | --- | --- | --- |
+| `prefix` | `string` | — | Prefix automatically prepended to every variable name lookup |
+| `defaults` | `Record<string, string>` | — | Fallback values used when a variable is not set |
+| `required` | `string[]` | — | List of variable names that must be present. `validate()` reports these. |
+
+## Methods
+
+| Method | Returns | Description |
+| --- | --- | --- |
+| `get(name, fallback?)` | `string \| undefined` | Returns the variable value, the fallback, the configured default, or `undefined` |
+| `require(name)` | `string` | Returns the value or throws if the variable is missing |
+| `getNumber(name, fallback?)` | `number \| undefined` | Parses the variable as a number |
+| `getBoolean(name, fallback?)` | `boolean \| undefined` | Parses the variable as a boolean (`"true"`, `"1"` → `true`) |
+| `getList(name, separator?)` | `string[]` | Splits the variable by `separator` (default `","`) into an array |
+| `isProd()` | `boolean` | Returns `true` when `NODE_ENV` is `"production"` |
+| `isDev()` | `boolean` | Returns `true` when `NODE_ENV` is `"development"` |
+| `isTest()` | `boolean` | Returns `true` when `NODE_ENV` is `"test"` |
+| `getAll()` | `Record<string, string>` | Returns all environment variables as a plain object |
+| `validate()` | `{ valid: boolean, missing: string[] }` | Checks whether all `required` variables are present |
+
+## Examples
+
+### Basic usage
+
+```ts
+import { EnvManager } from "bytekit/env-manager";
+
+const env = new EnvManager();
+
+const port = env.getNumber("PORT", 3000);
+const debug = env.getBoolean("DEBUG", false);
+const apiUrl = env.get("API_URL", "http://localhost:8080");
+```
+
+### Prefix scoping
+
+Automatically prepend a prefix to every lookup so you don't repeat it.
+
+```ts
+const env = new EnvManager({ prefix: "MYAPP_" });
+
+// Reads process.env.MYAPP_DB_HOST
+const dbHost = env.require("DB_HOST");
+
+// Reads process.env.MYAPP_DB_PORT
+const dbPort = env.getNumber("DB_PORT", 5432);
+```
+
+### Defaults and required variables
+
+```ts
+const env = new EnvManager({
+  defaults: {
+    LOG_LEVEL: "info",
+    CACHE_TTL: "60000",
+  },
+  required: ["DATABASE_URL", "JWT_SECRET"],
+});
+
+const { valid, missing } = env.validate();
+
+if (!valid) {
+  console.error("Missing required env vars:", missing);
+  process.exit(1);
+}
+```
+
+### Parsing lists
 
 ```ts
 const env = new EnvManager();
 
-const apiUrl = env.require("API_URL");
-const locale = env.get("APP_LOCALE") || "en";
+// ALLOWED_ORIGINS=https://a.com,https://b.com
+const origins = env.getList("ALLOWED_ORIGINS");
+// ["https://a.com", "https://b.com"]
+
+// FEATURES=alpha|beta|gamma
+const features = env.getList("FEATURES", "|");
+// ["alpha", "beta", "gamma"]
 ```
+
+### Environment detection
+
+```ts
+const env = new EnvManager();
+
+if (env.isProd()) {
+  logger.setLevel("warn");
+} else if (env.isDev()) {
+  logger.setLevel("debug");
+}
+```
+
+### Startup validation
+
+```ts
+import { EnvManager } from "bytekit/env-manager";
+
+const env = new EnvManager({
+  required: ["DATABASE_URL", "REDIS_URL", "JWT_SECRET"],
+});
+
+const { valid, missing } = env.validate();
+
+if (!valid) {
+  throw new Error(`Missing environment variables: ${missing.join(", ")}`);
+}
+```
+
+<Warning>
+  `require()` throws immediately if the variable is missing. Use `validate()` at startup to check all required variables at once and get a single, actionable error message.
+</Warning>
+
+<Tip>
+  Use the `prefix` option in monorepos or multi-service setups to isolate each service's config namespace without changing variable names in code.
+</Tip>

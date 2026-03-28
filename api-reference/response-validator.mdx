@@ -1,6 +1,6 @@
 ---
 title: "ResponseValidator"
-description: "Built-in response validation utilities."
+description: "Built-in schema validation for API responses — no external libraries required."
 ---
 
 ## Import
@@ -11,41 +11,146 @@ import { ResponseValidator } from "bytekit/response-validator";
 
 ## What it does
 
-`ResponseValidator` validates runtime payloads against a lightweight schema shape. Use it when you want built-in validation without adding Zod or Valibot.
+`ResponseValidator` validates runtime data against a lightweight schema shape. Use it when you want built-in validation without depending on Zod, Valibot, or another schema library. It checks types, required fields, string/number constraints, patterns, enums, and custom predicates.
 
-## Schema features
+## Static method
 
-- `type`
-- `required`
-- `properties`
-- `items`
-- `minLength`
-- `maxLength`
-- `minimum`
-- `maximum`
-- `pattern`
-- `enum`
-- `custom`
+### `ResponseValidator.validate(data, schema, path?)`
 
-## Example
+```ts
+const errors = ResponseValidator.validate(data, schema);
+```
+
+| Parameter | Type | Description |
+| --- | --- | --- |
+| `data` | `unknown` | The value to validate. |
+| `schema` | `ValidationSchema` | Schema definition describing the expected shape. |
+| `path` | `string` | _(Optional)_ Dot-path prefix for error messages. Defaults to `"root"`. |
+
+**Returns:** `ValidationError[]` — an array of errors. Empty means valid.
+
+### `ValidationError`
+
+| Property | Type | Description |
+| --- | --- | --- |
+| `path` | `string` | Dot-path to the invalid field (e.g. `root.email`). |
+| `message` | `string` | Human-readable error description. |
+| `value` | `unknown` | The actual value that failed validation. |
+
+## `ValidationSchema`
+
+| Property | Type | Description |
+| --- | --- | --- |
+| `type` | `"string" \| "number" \| "boolean" \| "object" \| "array"` | Expected type. |
+| `required` | `boolean` | If `true`, rejects `null` and `undefined`. |
+| `properties` | `Record<string, ValidationSchema>` | Nested schemas for object properties. |
+| `items` | `ValidationSchema` | Schema applied to each element of an array. |
+| `minLength` | `number` | Minimum string length. |
+| `maxLength` | `number` | Maximum string length. |
+| `minimum` | `number` | Minimum number value. |
+| `maximum` | `number` | Maximum number value. |
+| `pattern` | `RegExp \| string` | Regex pattern the string must match. |
+| `enum` | `unknown[]` | Allowed values. |
+| `custom` | `(value: unknown) => boolean \| string` | Custom validator. Return `true` to pass, or a string error message to fail. |
+
+## Examples
+
+### Basic object validation
+
+```ts
+import { ResponseValidator } from "bytekit/response-validator";
+
+const schema = {
+  type: "object" as const,
+  properties: {
+    id: { type: "number" as const, required: true },
+    email: {
+      type: "string" as const,
+      required: true,
+      pattern: /.+@.+\..+/,
+    },
+    role: {
+      type: "string" as const,
+      enum: ["admin", "user", "guest"],
+    },
+  },
+};
+
+const errors = ResponseValidator.validate(
+  { id: 1, email: "ada@example.com", role: "admin" },
+  schema,
+);
+
+if (errors.length === 0) {
+  console.log("Valid!");
+} else {
+  console.error("Validation failed:", errors);
+}
+```
+
+### Array with item schema
+
+```ts
+const listSchema = {
+  type: "array" as const,
+  items: {
+    type: "object" as const,
+    properties: {
+      id: { type: "number" as const, required: true },
+      name: { type: "string" as const, required: true, minLength: 1 },
+    },
+  },
+};
+
+const errors = ResponseValidator.validate(
+  [{ id: 1, name: "Alice" }, { id: 2, name: "" }],
+  listSchema,
+);
+// errors[0].path === "root[1].name"
+```
+
+### Custom validator
 
 ```ts
 const schema = {
-  type: "object",
-  properties: {
-    id: { type: "number", required: true },
-    email: { type: "string", required: true, pattern: /.+@.+\..+/ },
-  },
-} as const;
+  type: "number" as const,
+  required: true,
+  custom: (value: unknown) =>
+    (value as number) % 2 === 0 || "Must be an even number",
+};
 
-const errors = ResponseValidator.validate(
-  { id: 1, email: "ada@example.com" },
-  schema
-);
+const errors = ResponseValidator.validate(3, schema);
+// errors[0].message === "Must be an even number"
 ```
+
+### Using with ApiClient
+
+You can pass a `ValidationSchema` directly to the `validateResponse` option on any `ApiClient` request:
+
+```ts
+import { ApiClient } from "bytekit/api-client";
+
+const api = new ApiClient({ baseUrl: "https://api.example.com" });
+
+const userSchema = {
+  type: "object" as const,
+  properties: {
+    id: { type: "number" as const, required: true },
+    name: { type: "string" as const, required: true },
+  },
+};
+
+const user = await api.get("/users/1", {
+  validateResponse: userSchema,
+});
+```
+
+<Tip>
+  For more expressive schemas, consider using [Zod or Valibot adapters](/api-reference/schema-adapters) instead. `ResponseValidator` is ideal when you want zero external dependencies.
+</Tip>
 
 ## When to use it
 
-- You want a package-native validator
-- You only need structural runtime checks
-- You do not want an external schema library
+- You want a package-native validator with no extra dependencies
+- You only need structural and constraint checks at runtime
+- You want to keep your bundle lean

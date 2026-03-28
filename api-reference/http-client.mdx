@@ -1,223 +1,50 @@
 ---
 title: "HTTP client"
-description: "Reference for ApiClient, ApiError, request options, and schema adapters."
+description: "Overview of the ByteKit HTTP layer — requests, validation, schema adapters, and URL utilities."
 ---
 
-## What belongs here
+## What this group covers
 
-Use this page when you need to understand the request layer itself:
+The HTTP modules handle everything between your application code and the network: typed requests, response validation, schema integration, and URL manipulation.
 
-- `ApiClient`
-- `ApiError`
-- per-request options
-- schema adapters
-- built-in response validation
+<CardGroup cols={2}>
+  <Card title="ApiClient" icon="satellite-dish" href="/api-reference/api-client">
+    Core HTTP client with interceptors, retries, circuit breaker, and typed responses.
+  </Card>
+  <Card title="ResponseValidator" icon="shield-check" href="/api-reference/response-validator">
+    Framework-agnostic response validation against structural schemas.
+  </Card>
+  <Card title="Schema adapters" icon="plug" href="/api-reference/schema-adapters">
+    Zod and Valibot adapters for response validation.
+  </Card>
+  <Card title="UrlHelper" icon="link" href="/api-reference/url-helper">
+    URL parsing, building, query-string helpers, and slugification.
+  </Card>
+</CardGroup>
 
-## Module entrypoints
-
-- `bytekit`
-- `bytekit/api-client`
-- `bytekit/schema-adapter`
-- `bytekit/response-validator`
-
-## `ApiClient`
-
-Primary class for isomorphic HTTP requests.
-
-### Constructor config
-
-| Option | Purpose |
-| --- | --- |
-| `baseUrl` or `baseURL` | Base URL for all requests |
-| `defaultHeaders` | Default headers for every request |
-| `fetchImpl` | Custom fetch implementation |
-| `locale` | Error message locale |
-| `errorMessages` | Per-locale status message overrides |
-| `timeoutMs` | Default request timeout |
-| `interceptors` | Request and response hooks |
-| `disableInterceptors` | Disable configured interceptors |
-| `logHeaders` | Include headers in logging |
-| `redactHeaderKeys` | Header keys to redact |
-| `logger` | Logger instance |
-| `retryPolicy` | Retry policy config |
-| `circuitBreaker` | Circuit breaker config |
-
-### Basic setup
+## Quick example
 
 ```ts
-import { ApiClient } from "bytekit/api-client";
+import { ApiClient, zodAdapter } from "bytekit";
+import { UrlHelper } from "bytekit/url-helper";
+import { z } from "zod";
 
 const api = new ApiClient({
   baseUrl: "https://api.example.com",
   timeoutMs: 10_000,
-  defaultHeaders: {
-    Authorization: `Bearer ${token}`,
-  },
-});
-```
-
-### Main methods
-
-| Method | Purpose |
-| --- | --- |
-| `get(path, options?)` | GET request |
-| `post(path, bodyOrOptions?)` | POST request |
-| `put(path, bodyOrOptions?)` | PUT request |
-| `patch(path, bodyOrOptions?)` | PATCH request |
-| `delete(path, options?)` | DELETE request |
-| `getList(path, options?)` | Paginated list requests with filters and sort |
-
-### Read data
-
-```ts
-type User = {
-  id: number;
-  name: string;
-  email: string;
-};
-
-const users = await api.get<User[]>("/users");
-```
-
-### Write data
-
-```ts
-const created = await api.post<{ id: string }>("/users", {
-  name: "Ada Lovelace",
-  email: "ada@example.com",
-});
-```
-
-### Query params
-
-```ts
-const results = await api.get("/users", {
-  searchParams: {
-    page: 1,
-    limit: 20,
-    status: "active",
-  },
-});
-```
-
-### Paginated lists with filters and sort
-
-```ts
-const page = await api.getList<{ id: number; name: string }>("/users", {
-  pagination: { page: 1, limit: 25 },
-  sort: { field: "name", order: "asc" },
-  filters: { status: "active" },
-});
-```
-
-### Request options
-
-| Option | Purpose |
-| --- | --- |
-| `searchParams` | Query string parameters |
-| `body` | Request body |
-| `headers` | Per-request headers |
-| `errorLocale` | Override locale for one request |
-| `timeoutMs` | Per-request timeout override |
-| `validateResponse` | Built-in schema or adapter validation |
-| `skipRetry` | Skip retry policy for one call |
-| `skipInterceptors` | Skip interceptors for one call |
-
-### Interceptors
-
-```ts
-const api = new ApiClient({
-  baseUrl: "https://api.example.com",
-  interceptors: {
-    request: async (url, init) => {
-      const headers = new Headers(init.headers);
-      headers.set("X-Request-Id", crypto.randomUUID());
-      return [url, { ...init, headers }];
-    },
-    response: async (response) => {
-      console.log("status", response.status);
-      return response;
-    },
-  },
-});
-```
-
-## `ApiError`
-
-Error type raised for failed HTTP requests.
-
-Useful properties:
-
-- `status`
-- `statusText`
-- `message`
-- `body`
-- `isTimeout`
-- `details`
-
-### Error handling
-
-```ts
-import { ApiClient, ApiError } from "bytekit";
-
-try {
-  await api.get("/users/999");
-} catch (error) {
-  if (error instanceof ApiError) {
-    console.error(error.status);
-    console.error(error.message);
-    console.error(error.body);
-  }
-}
-```
-
-## `zodAdapter` and `valibotAdapter`
-
-Use these when you want schema validation without tying your docs to internal validation logic.
-
-```ts
-import { ApiClient, zodAdapter } from "bytekit";
-import { z } from "zod";
-
-const UserSchema = z.object({
-  id: z.number(),
-  name: z.string(),
 });
 
-const api = new ApiClient({
-  baseUrl: "https://api.example.com",
-});
+const UserSchema = z.object({ id: z.number(), name: z.string() });
 
+// Typed + validated request
 const user = await api.get("/users/1", {
   validateResponse: zodAdapter(UserSchema),
 });
+
+// Build a URL with query params
+const url = UrlHelper.setQueryParams("/search", { q: "bytekit", page: "1" });
 ```
 
-## Built-in response validation
-
-If you prefer a framework-agnostic validation shape, use `bytekit/response-validator`.
-
-Use this path when:
-
-- You want lightweight structural checks
-- You do not want to depend on Zod or Valibot
-- You want docs that stay package-native
-
-### Example with `ResponseValidator`
-
-```ts
-import { ResponseValidator } from "bytekit/response-validator";
-
-const schema = {
-  type: "object",
-  properties: {
-    id: { type: "number", required: true },
-    name: { type: "string", required: true },
-  },
-} as const;
-
-const errors = ResponseValidator.validate(
-  { id: 1, name: "Ada" },
-  schema
-);
-```
+<Tip>
+  Start with [ApiClient](/api-reference/api-client) for the full constructor config, methods, and error-handling reference.
+</Tip>

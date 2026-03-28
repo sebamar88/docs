@@ -1,31 +1,141 @@
 ---
 title: "Logger"
-description: "Class reference and examples for Logger."
+description: "Class reference and examples for Logger — structured, level-based logging with transports and child loggers."
 ---
 
 ## Import
 
 ```ts
-import { Logger } from "bytekit/logger";
-import { createLogger } from "bytekit";
+import { Logger, createLogger } from "bytekit/logger";
 ```
 
-## Example
+## Constructor
 
 ```ts
-const logger = createLogger({
-  namespace: "billing",
-  level: "debug",
-});
-
-logger.info("Creating invoice", { id: "inv_123" });
+const logger = new Logger(config?);
 ```
 
-## Main methods
+### Config options
 
-- `debug(message, context?)`
-- `info(message, context?)`
-- `warn(message, context?)`
-- `error(message, context?, error?)`
-- `setLevel(level)`
-- `child(namespace)`
+| Property | Type | Default | Description |
+| --- | --- | --- | --- |
+| `level` | `"debug" \| "info" \| "warn" \| "error"` | `"info"` | Minimum severity level to emit |
+| `namespace` | `string` | — | Prefix prepended to every message |
+| `formatter` | `(level, message, ...args) => string` | — | Custom message formatting function |
+| `transports` | `Transport[]` | — | Array of output targets |
+| `silent` | `boolean` | `false` | When `true`, suppresses all output |
+
+## Log levels
+
+Levels are ordered by severity. Setting a level silences everything below it.
+
+| Level | Severity |
+| --- | --- |
+| `debug` | Lowest — verbose development output |
+| `info` | General operational messages |
+| `warn` | Potential issues worth investigating |
+| `error` | Highest — failures that need attention |
+
+## Methods
+
+| Method | Returns | Description |
+| --- | --- | --- |
+| `debug(message, ...args)` | `void` | Logs at `debug` level |
+| `info(message, ...args)` | `void` | Logs at `info` level |
+| `warn(message, ...args)` | `void` | Logs at `warn` level |
+| `error(message, ...args)` | `void` | Logs at `error` level |
+| `log(level, message, ...args)` | `void` | Logs at an explicit level |
+| `setLevel(level)` | `void` | Changes the minimum level at runtime |
+| `child(namespace)` | `Logger` | Creates a child logger with a prefixed namespace |
+| `addTransport(transport)` | `void` | Adds an output target at runtime |
+| `removeTransport(transport)` | `void` | Removes a previously added transport |
+
+## `Transport` interface
+
+Any object that implements the following method can be used as a transport:
+
+```ts
+interface Transport {
+  log(level: string, message: string, ...args: unknown[]): void;
+}
+```
+
+## `createLogger` factory
+
+Shortcut that creates and returns a `Logger` instance. Accepts the same config as the constructor.
+
+```ts
+const logger = createLogger({ level: "debug", namespace: "app" });
+```
+
+## Examples
+
+### Basic usage
+
+```ts
+import { Logger } from "bytekit/logger";
+
+const logger = new Logger({ level: "info" });
+
+logger.info("Server started on port %d", 3000);
+logger.warn("Disk usage above 90%");
+logger.error("Connection to database lost");
+```
+
+### Child loggers
+
+Create scoped loggers that inherit the parent's config and prepend a namespace.
+
+```ts
+const root = new Logger({ level: "debug" });
+const dbLogger = root.child("db");
+const httpLogger = root.child("http");
+
+dbLogger.info("Connected to postgres");  // [db] Connected to postgres
+httpLogger.debug("GET /users 200 12ms"); // [http] GET /users 200 12ms
+```
+
+### Custom transport
+
+```ts
+const fileTransport: Transport = {
+  log(level, message, ...args) {
+    const line = `[${new Date().toISOString()}] ${level}: ${message}\n`;
+    fs.appendFileSync("app.log", line);
+  },
+};
+
+const logger = new Logger({
+  level: "info",
+  transports: [fileTransport],
+});
+```
+
+### Runtime level switching
+
+```ts
+const logger = new Logger({ level: "info" });
+
+// Later, enable debug output in response to a signal
+process.on("SIGUSR2", () => {
+  logger.setLevel("debug");
+  logger.debug("Debug logging enabled");
+});
+```
+
+### Silent mode for tests
+
+```ts
+const logger = new Logger({ silent: true });
+
+// No output — useful in test suites
+logger.error("This is suppressed");
+```
+
+<Tip>
+  Use `child()` to give each module its own namespace. This makes it easy to filter logs in production without changing log levels globally.
+</Tip>
+
+<Note>
+  The default transport writes to `console`. Add custom transports to send logs to files, remote services, or monitoring tools.
+</Note>

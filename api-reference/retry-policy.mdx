@@ -1,6 +1,6 @@
 ---
 title: "RetryPolicy"
-description: "Class reference and examples for RetryPolicy."
+description: "Automatic retries with exponential backoff and jitter for transient failures."
 ---
 
 ## Import
@@ -9,29 +9,115 @@ description: "Class reference and examples for RetryPolicy."
 import { RetryPolicy } from "bytekit/retry-policy";
 ```
 
-## Config
+## What it does
 
-- `maxAttempts`
-- `initialDelayMs`
-- `maxDelayMs`
-- `backoffMultiplier`
-- `shouldRetry`
+`RetryPolicy` wraps any async function with automatic retries using exponential backoff and jitter. When all attempts are exhausted, the last error is thrown. A configurable `shouldRetry` predicate controls which errors trigger retries.
 
-## Example
+<Info>
+  `ApiClient` creates an internal `RetryPolicy` from the `retryPolicy` config option. Use this class directly when you need retries outside of HTTP requests.
+</Info>
+
+## Constructor
 
 ```ts
-const retryPolicy = new RetryPolicy({
+const policy = new RetryPolicy(config?: RetryConfig);
+```
+
+### `RetryConfig`
+
+| Property | Type | Default | Description |
+| --- | --- | --- | --- |
+| `maxAttempts` | `number` | `3` | Total number of attempts (including the first). |
+| `initialDelayMs` | `number` | `100` | Base delay before the first retry (ms). |
+| `maxDelayMs` | `number` | `10000` | Maximum delay cap (ms). |
+| `backoffMultiplier` | `number` | `2` | Multiplier applied to the delay after each attempt. |
+| `shouldRetry` | `(error: Error, attempt: number) => boolean` | Built-in | Predicate to decide whether a given error should be retried. |
+
+The built-in `shouldRetry` predicate retries on:
+- HTTP status `408` (timeout), `429` (rate limit), and `5xx` (server errors)
+- Network-related error messages (`timeout`, `network`, `ECONNREFUSED`, `ECONNRESET`)
+
+## Methods
+
+### `execute<T>(fn)`
+
+```ts
+const result = await policy.execute(() => fetchData());
+```
+
+Runs `fn` up to `maxAttempts` times. Returns the result on the first success. Throws the last error if all attempts fail.
+
+| Parameter | Type | Description |
+| --- | --- | --- |
+| `fn` | `() => Promise<T>` | The async function to execute with retries. |
+
+### `getConfig()`
+
+Returns the resolved configuration object, useful for debugging or logging.
+
+```ts
+console.log(policy.getConfig());
+// { maxAttempts: 3, initialDelayMs: 100, maxDelayMs: 10000, ... }
+```
+
+## How backoff works
+
+The delay between retries follows this formula:
+
+delay = min(
+  initialDelayMs × backoffMultiplier^(attempt - 1) + jitter,
+  maxDelayMs
+)
+
+Jitter is added automatically (up to 10% of the exponential delay) to prevent thundering-herd effects when many clients retry at the same time.
+
+## Examples
+
+### Basic retry
+
+```ts
+import { RetryPolicy } from "bytekit/retry-policy";
+
+const policy = new RetryPolicy({
   maxAttempts: 3,
   initialDelayMs: 200,
   maxDelayMs: 5000,
   backoffMultiplier: 2,
 });
 
-const data = await retryPolicy.execute(() => fetchData());
+const data = await policy.execute(() =>
+  fetch("https://api.example.com/data").then((r) => r.json()),
+);
 ```
 
-## Use it when
+### Custom `shouldRetry` predicate
 
-- failures are transient
-- a full HTTP client is not involved
-- you want reusable retry policy outside request code
+```ts
+const policy = new RetryPolicy({
+  maxAttempts: 5,
+  shouldRetry: (error, attempt) => {
+    // Only retry on network errors, not on 4xx
+    const status = (error as { status?: number }).status;
+    if (status && status >= 400 && status < 500) return false;
+    return true;
+  },
+});
+
+const result = await policy.execute(() => riskyOperation());
+```
+
+### Wrapping a non-HTTP operation
+
+```ts
+const dbPolicy = new RetryPolicy({
+  maxAttempts: 3,
+  initialDelayMs: 500,
+  shouldRetry: (error) => error.message.includes("ECONNREFUSED"),
+});
+
+const rows = await dbPolicy.execute(() => db.query("SELECT * FROM users"));
+```
+
+<Warning>
+  `RetryPolicy` does **not** deduplicate in-flight calls. If you call `execute` concurrently with the same function, each call retries independently. Combine with [RequestDeduplicator](/api-reference/request-deduplicator) if you need deduplication.
+</Warning>

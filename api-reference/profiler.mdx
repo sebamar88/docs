@@ -1,28 +1,206 @@
 ---
 title: "Profiler"
-description: "Class reference and examples for Profiler."
+description: "Class reference and examples for Profiler and debug timing utilities — measure execution time for functions, blocks, and async operations."
 ---
 
 ## Import
 
 ```ts
 import { Profiler } from "bytekit/profiler";
+import {
+  createStopwatch,
+  withTiming,
+  measureSync,
+  measureAsync,
+  captureDebug,
+} from "bytekit/debug";
 ```
 
-## Example
+## `Profiler`
+
+Accumulates named timing measurements and produces a summary.
+
+### Constructor
 
 ```ts
-const profiler = new Profiler("checkout");
-
-profiler.start("create-payment");
-await createPayment();
-profiler.end("create-payment");
-
-console.log(profiler.summary());
+const profiler = new Profiler(namespace?);
 ```
 
-## Main methods
+| Property | Type | Default | Description |
+| --- | --- | --- | --- |
+| `namespace` | `string` | — | Optional label to group measurements |
 
-- `start(label)`
-- `end(label)`
-- `summary()`
+### Methods
+
+| Method | Returns | Description |
+| --- | --- | --- |
+| `start(label)` | `void` | Begins a timing measurement for the given label |
+| `end(label)` | `void` | Ends the measurement started with `start(label)` |
+| `summary()` | `Record<string, number>` or `Record<string, Record<string, number>>` | Returns accumulated timings. Flat when no namespace is set; namespaced otherwise. |
+
+### Example
+
+```ts
+import { Profiler } from "bytekit/profiler";
+
+const profiler = new Profiler("api");
+
+profiler.start("fetchUsers");
+const users = await fetchUsers();
+profiler.end("fetchUsers");
+
+profiler.start("transformData");
+const result = transform(users);
+profiler.end("transformData");
+
+console.log(profiler.summary());
+// { api: { fetchUsers: 120, transformData: 3 } }
+```
+
+---
+
+## Debug utilities
+
+Standalone timing functions from `bytekit/debug` for one-off measurements without managing a `Profiler` instance.
+
+### `createStopwatch`
+
+Creates a manual stopwatch for fine-grained control.
+
+```ts
+const sw = createStopwatch(options?);
+```
+
+#### Options
+
+| Property | Type | Default | Description |
+| --- | --- | --- | --- |
+| `label` | `string` | — | Identifier for log output |
+| `logger` | `Logger` | — | Logger instance for automatic output |
+| `precision` | `number` | — | Decimal places for millisecond values |
+| `autoLog` | `boolean` | — | Automatically log the duration on `stop()` |
+| `namespace` | `string` | — | Prefix for log messages |
+
+#### Stopwatch methods
+
+| Method | Returns | Description |
+| --- | --- | --- |
+| `stop()` | `number` | Stops the timer and returns elapsed milliseconds |
+| `elapsed()` | `number` | Returns elapsed milliseconds without stopping |
+| `log(context?)` | `number` | Logs the elapsed time and returns it |
+
+#### Example
+
+```ts
+import { createStopwatch } from "bytekit/debug";
+
+const sw = createStopwatch({ label: "db-query" });
+
+await db.query("SELECT * FROM users");
+
+const ms = sw.stop();
+console.log(`Query took ${ms}ms`);
+```
+
+### `withTiming`
+
+Wraps an async function and logs its execution time.
+
+```ts
+const result = await withTiming<T>(label, fn, options?);
+```
+
+| Parameter | Type | Description |
+| --- | --- | --- |
+| `label` | `string` | Identifier for the measurement |
+| `fn` | `() => Promise<T>` | Async function to measure |
+| `options` | `object` | Same as stopwatch options |
+
+#### Example
+
+```ts
+import { withTiming } from "bytekit/debug";
+
+const users = await withTiming("loadUsers", () => api.get("/users"));
+```
+
+### `measureSync`
+
+Measures a synchronous function and returns its result.
+
+```ts
+const result = measureSync<T>(label, fn, options?);
+```
+
+#### Example
+
+```ts
+import { measureSync } from "bytekit/debug";
+
+const sorted = measureSync("sortItems", () =>
+  items.sort((a, b) => a.name.localeCompare(b.name))
+);
+```
+
+### `measureAsync`
+
+Measures an async function and returns both the result and the duration.
+
+```ts
+const { result, durationMs } = await measureAsync<T>(label, fn, options?);
+```
+
+#### Example
+
+```ts
+import { measureAsync } from "bytekit/debug";
+
+const { result, durationMs } = await measureAsync("fetchReport", () =>
+  api.get("/reports/monthly")
+);
+
+console.log(`Report loaded in ${durationMs}ms`);
+```
+
+### `captureDebug`
+
+Captures timing information for an async operation without a label.
+
+```ts
+const { result, durationMs } = await captureDebug<T>(fn);
+```
+
+#### Example
+
+```ts
+import { captureDebug } from "bytekit/debug";
+
+const { result, durationMs } = await captureDebug(() =>
+  fetch("https://api.example.com/health")
+);
+
+if (durationMs > 2000) {
+  console.warn("Health check is slow");
+}
+```
+
+## Choosing the right tool
+
+<AccordionGroup>
+  <Accordion title="Use Profiler when…">
+    You need to accumulate multiple named measurements across a workflow and produce a summary at the end — for example, profiling an entire request lifecycle.
+  </Accordion>
+  <Accordion title="Use createStopwatch when…">
+    You want manual start/stop control over a single measurement with optional automatic logging.
+  </Accordion>
+  <Accordion title="Use withTiming / measureSync / measureAsync when…">
+    You want a one-liner that wraps an existing function call and logs or returns the duration.
+  </Accordion>
+  <Accordion title="Use captureDebug when…">
+    You need a quick timing capture without labels or logging — useful in tests and diagnostics.
+  </Accordion>
+</AccordionGroup>
+
+<Tip>
+  Combine `Profiler` with the [Logger](/api-reference/logger) to ship timing data to your observability stack.
+</Tip>

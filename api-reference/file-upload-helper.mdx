@@ -1,6 +1,6 @@
 ---
-title: "File upload helper"
-description: "Reference for file upload helpers."
+title: "FileUploadHelper"
+description: "Static helpers for single, multi-file, and chunked uploads with progress tracking and validation."
 ---
 
 ## Import
@@ -9,8 +9,195 @@ description: "Reference for file upload helpers."
 import { FileUploadHelper } from "bytekit/file-upload";
 ```
 
-## Use it for
+## What it does
 
-- multipart uploads
-- upload workflow helpers
-- progress-aware file transfer flows
+`FileUploadHelper` exposes a set of **static** methods that cover the most common file-upload workflows: single and multi-file uploads, chunked uploads for large files, client-side validation, and `FormData` construction. Every upload method returns a typed `UploadResult` and supports progress callbacks.
+
+## Methods
+
+### `createFormData(files, fieldName?)`
+
+```ts
+const form = FileUploadHelper.createFormData(files, "attachments");
+```
+
+Wraps one or more `File` objects into a `FormData` instance.
+
+| Parameter | Type | Default | Description |
+| --- | --- | --- | --- |
+| `files` | `File \| File[]` | — | File(s) to include. |
+| `fieldName` | `string` | `"file"` | Form field name. |
+
+### `uploadFile(url, file, options?)`
+
+```ts
+const result = await FileUploadHelper.uploadFile("/api/upload", file, {
+  onProgress: (pct) => console.log(`${pct}%`),
+});
+```
+
+Uploads a single file and returns an `UploadResult`.
+
+| Parameter | Type | Description |
+| --- | --- | --- |
+| `url` | `string` | Upload endpoint. |
+| `file` | `File` | File to upload. |
+| `options` | `FileUploadOptions` | Optional configuration (see below). |
+
+### `uploadFiles(url, files, options?)`
+
+```ts
+const results = await FileUploadHelper.uploadFiles("/api/upload", files);
+```
+
+Uploads multiple files in parallel. Returns `UploadResult[]`.
+
+### `createChunks(file, chunkSize?)`
+
+```ts
+const chunks = FileUploadHelper.createChunks(largeFile, 2 * 1024 * 1024);
+```
+
+Splits a `File` into `Blob[]` chunks.
+
+| Parameter | Type | Default | Description |
+| --- | --- | --- | --- |
+| `file` | `File` | — | File to split. |
+| `chunkSize` | `number` | `1_048_576` (1 MB) | Size of each chunk in bytes. |
+
+### `uploadChunked(url, file, options?)`
+
+```ts
+const result = await FileUploadHelper.uploadChunked("/api/upload", largeFile, {
+  chunkSize: 5 * 1024 * 1024,
+  maxRetries: 3,
+  onProgress: (pct) => setProgress(pct),
+});
+```
+
+Uploads a file in chunks with automatic retry per chunk.
+
+### `validateFile(file, constraints)`
+
+```ts
+const { valid, errors } = FileUploadHelper.validateFile(file, {
+  maxSize: 10 * 1024 * 1024,
+  allowedTypes: ["image/png", "image/jpeg"],
+  allowedExtensions: [".png", ".jpg", ".jpeg"],
+});
+```
+
+Validates a file against size, MIME type, and extension constraints. Returns a `ValidationResult`.
+
+### `getFileInfo(file)`
+
+```ts
+const info = FileUploadHelper.getFileInfo(file);
+// { name: "photo.jpg", size: 204800, type: "image/jpeg",
+//   lastModified: 1711497600000, extension: ".jpg" }
+```
+
+Returns metadata about a `File` object.
+
+## Types
+
+### `FileUploadOptions`
+
+| Property | Type | Default | Description |
+| --- | --- | --- | --- |
+| `fieldName` | `string` | `"file"` | Form field name sent to the server. |
+| `headers` | `Record<string, string>` | — | Extra request headers. |
+| `onProgress` | `(percent: number) => void` | — | Progress callback (0–100). |
+| `method` | `string` | `"POST"` | HTTP method. |
+| `timeout` | `number` | — | Request timeout in ms. |
+| `chunkSize` | `number` | `1_048_576` | Chunk size for chunked uploads. |
+| `maxRetries` | `number` | `0` | Retries per chunk on failure. |
+
+### `UploadResult`
+
+| Property | Type | Description |
+| --- | --- | --- |
+| `success` | `boolean` | Whether the upload succeeded. |
+| `status` | `number` | HTTP status code. |
+| `data` | `unknown` | Parsed response body (if any). |
+| `error` | `string` | Error message (if failed). |
+| `fileName` | `string` | Original file name. |
+| `duration` | `number` | Upload duration in ms. |
+
+### `ValidationResult`
+
+| Property | Type | Description |
+| --- | --- | --- |
+| `valid` | `boolean` | `true` if all constraints pass. |
+| `errors` | `string[]` | List of validation error messages. |
+
+### `FileInfo`
+
+| Property | Type | Description |
+| --- | --- | --- |
+| `name` | `string` | File name. |
+| `size` | `number` | Size in bytes. |
+| `type` | `string` | MIME type. |
+| `lastModified` | `number` | Timestamp of last modification. |
+| `extension` | `string` | File extension (e.g. `".png"`). |
+
+### Constraints
+
+| Property | Type | Description |
+| --- | --- | --- |
+| `maxSize` | `number` | Maximum allowed file size in bytes. |
+| `allowedTypes` | `string[]` | Allowed MIME types. |
+| `allowedExtensions` | `string[]` | Allowed file extensions. |
+
+## Examples
+
+### Validate before upload
+
+```ts
+import { FileUploadHelper } from "bytekit/file-upload";
+
+function handleFile(file: File) {
+  const { valid, errors } = FileUploadHelper.validateFile(file, {
+    maxSize: 5 * 1024 * 1024,
+    allowedTypes: ["application/pdf"],
+  });
+
+  if (!valid) {
+    console.error("Validation failed:", errors);
+    return;
+  }
+
+  return FileUploadHelper.uploadFile("/api/documents", file, {
+    headers: { Authorization: `Bearer ${token}` },
+    onProgress: (p) => console.log(`Uploading… ${p}%`),
+  });
+}
+```
+
+### Chunked upload with retry
+
+```ts
+import { FileUploadHelper } from "bytekit/file-upload";
+
+const result = await FileUploadHelper.uploadChunked(
+  "/api/videos/upload",
+  videoFile,
+  {
+    chunkSize: 2 * 1024 * 1024,
+    maxRetries: 3,
+    onProgress: (pct) => progressBar.update(pct),
+  },
+);
+
+if (result.success) {
+  console.log(`Uploaded in ${result.duration}ms`);
+}
+```
+
+<Tip>
+  Always call `validateFile` before uploading to give users instant feedback without waiting for a server round-trip.
+</Tip>
+
+<Warning>
+  `createChunks` returns in-memory `Blob` slices. For very large files, upload chunks as they are created instead of buffering the entire array.
+</Warning>
