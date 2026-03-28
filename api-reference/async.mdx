@@ -17,9 +17,11 @@ import {
   allSettled,
   debounceAsync,
   throttleAsync,
+  PromisePool,
   TimeoutError,
   AbortError,
   RetryError,
+  PoolTimeoutError,
 } from "bytekit/async";
 ```
 
@@ -175,6 +177,73 @@ const { fulfilled, rejected } = await allSettled([
 | `fulfilled` | `Array<{ value: T; index: number }>` |
 | `rejected` | `Array<{ reason: unknown; index: number }>` |
 
+### `PromisePool`
+
+A **reusable, class-based** concurrency controller. Unlike `parallel()`, `PromisePool`:
+- Persists across multiple `run()` calls.
+- Isolates task errors via `onError` — the pool keeps running when one task fails.
+- Supports per-task timeouts that throw `PoolTimeoutError`.
+
+```ts
+const pool = new PromisePool({ concurrency: 3, timeout: 5000 });
+
+const results = await pool.run(
+  files.map((file) => () => uploadFile(file))
+);
+
+// Reuse the same pool for a second batch
+const more = await pool.run(
+  others.map((file) => () => uploadFile(file))
+);
+```
+
+#### `PromisePoolOptions`
+
+| Option | Type | Default | Description |
+| --- | --- | --- | --- |
+| `concurrency` | `number` | — | Max tasks running at once. Minimum: `1`. |
+| `timeout` | `number` | — | Per-task timeout in ms. Throws `PoolTimeoutError` when exceeded. |
+| `onError` | `(error: Error, taskIndex: number) => void` | — | Called when a task fails. Pool continues executing remaining tasks. |
+
+#### Error handling with `onError`
+
+```ts
+const pool = new PromisePool({
+  concurrency: 2,
+  timeout: 3000,
+  onError(error, taskIndex) {
+    if (error instanceof PoolTimeoutError) {
+      console.warn(`Task ${taskIndex} timed out`);
+    } else {
+      console.error(`Task ${taskIndex} failed:`, error.message);
+    }
+  },
+});
+
+const results = await pool.run(
+  endpoints.map((url) => () => fetch(url).then((r) => r.json()))
+);
+```
+
+#### ApiClient integration
+
+Pass a `pool` option to `ApiClient` to rate-limit all outgoing requests:
+
+```ts
+const api = new ApiClient({
+  baseUrl: "https://api.example.com",
+  pool: { concurrency: 2, timeout: 5000 },
+});
+
+// All 4 requests share the same pool — at most 2 run at a time
+const [users, posts, comments, tags] = await Promise.all([
+  api.request("/users"),
+  api.request("/posts"),
+  api.request("/comments"),
+  api.request("/tags"),
+]);
+```
+
 ---
 
 ## Debounce and throttle
@@ -260,12 +329,26 @@ Thrown when all retry attempts are exhausted.
 | `attempts` | `number` | Total attempts executed. |
 | `lastError` | `Error` | The error from the final attempt. |
 
+### `PoolTimeoutError`
+
+Thrown by `PromisePool` when an individual task exceeds its configured `timeout`.
+
+```ts
+try {
+  await pool.run([() => slowOperation()]);
+} catch (error) {
+  if (error instanceof PoolTimeoutError) {
+    console.error(error.message); // "Task timed out after 5000ms"
+  }
+}
+```
+
 ---
 
 ## Combined example
 
 ```ts
-import { parallel, retry, timeout, debounceAsync, sleep } from "bytekit/async";
+import { PromisePool, PoolTimeoutError, retry, timeout, debounceAsync } from "bytekit/async";
 
 // Retry a slow endpoint with a per-call timeout
 const data = await retry(
@@ -273,10 +356,14 @@ const data = await retry(
   { maxAttempts: 4, baseDelay: 250 }
 );
 
-// Upload files with bounded concurrency
-const uploads = await parallel(
-  files.map((f) => () => uploadFile(f)),
-  { concurrency: 3 }
+// Upload files with bounded concurrency and per-task timeout
+const pool = new PromisePool({
+  concurrency: 3,
+  timeout: 10_000,
+  onError: (err, i) => console.warn(`Upload ${i} failed:`, err instanceof PoolTimeoutError ? "timed out" : err.message),
+});
+const uploads = await pool.run(
+  files.map((f) => () => uploadFile(f))
 );
 
 // Debounced search input
