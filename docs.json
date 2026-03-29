@@ -79,7 +79,8 @@
           {
             "group": "Async",
             "pages": [
-              "api-reference/async"
+              "api-reference/async",
+              "api-reference/pipeline"
             ]
           },
           {
