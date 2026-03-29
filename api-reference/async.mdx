@@ -1,6 +1,6 @@
 ---
 title: "Async"
-description: "Complete reference for ByteKit async utilities — timing, retries, concurrency, debounce, throttle, and flow control."
+description: "Complete reference for ByteKit async utilities — timing, retries, concurrency, debounce, throttle, request queue, and batching."
 ---
 
 ## Import
@@ -18,16 +18,19 @@ import {
   debounceAsync,
   throttleAsync,
   PromisePool,
+  RequestQueue,
+  RequestBatcher,
   TimeoutError,
   AbortError,
   RetryError,
   PoolTimeoutError,
+  QueueAbortError,
 } from "bytekit/async";
 ```
 
 ## What this module is for
 
-Use `bytekit/async` when you need control over timing, retries, concurrency, and flow control outside the HTTP client itself. Every export is a standalone function — no classes to instantiate.
+Use `bytekit/async` when you need control over timing, retries, concurrency, and flow control outside the HTTP client itself. Every export is a standalone function or class — composable and zero-dependency.
 
 ---
 
@@ -341,6 +344,188 @@ try {
     console.error(error.message); // "Task timed out after 5000ms"
   }
 }
+```
+
+### `QueueAbortError`
+
+Thrown by `RequestQueue` when a queued task is cancelled — either via an external `AbortSignal` or the internal `cancel(id)` mechanism.
+
+```ts
+const controller = new AbortController();
+queue.add(myTask, { signal: controller.signal }).catch((err) => {
+  if (err instanceof QueueAbortError) {
+    console.log("Task was cancelled");
+  }
+});
+controller.abort(); // fires QueueAbortError
+```
+
+---
+
+## RequestQueue
+
+A priority-aware, concurrency-limited task queue. At most `concurrency` tasks run simultaneously. Three priority lanes — `high`, `normal`, `low` — control execution order when multiple tasks are waiting.
+
+### Constructor
+
+```ts
+const queue = new RequestQueue({ concurrency: 3 });
+```
+
+| Option | Type | Required | Description |
+| --- | --- | --- | --- |
+| `concurrency` | `number` | ✅ | Max simultaneous tasks. Must be ≥ 1. |
+| `onError` | `(error: Error, id: string) => void` | — | Called when a task rejects. Queue continues. |
+
+### `add(task, options?)`
+
+Enqueues a task and returns a `Promise<T>` that resolves/rejects with the task result.
+
+```ts
+const result = await queue.add(
+  (signal) => fetch("/api/data", { signal }),
+  { priority: "high" }
+);
+```
+
+| Option | Type | Default | Description |
+| --- | --- | --- | --- |
+| `priority` | `"high" \| "normal" \| "low"` | `"normal"` | Execution lane. |
+| `signal` | `AbortSignal` | — | External cancellation. Fires `QueueAbortError` if aborted before the task starts. |
+
+### `flush()`
+
+Returns a `Promise<void>` that resolves when all currently queued and running tasks have settled.
+
+```ts
+queue.add(taskA);
+queue.add(taskB);
+await queue.flush(); // waits for both to complete
+```
+
+### State getters
+
+| Getter | Type | Description |
+| --- | --- | --- |
+| `size` | `number` | Tasks waiting to start (queued, not running). |
+| `running` | `number` | Tasks currently executing. |
+| `pending` | `number` | `size + running` — total active work. |
+
+### Full example
+
+```ts
+import { RequestQueue, QueueAbortError } from "bytekit/async";
+
+const queue = new RequestQueue({
+  concurrency: 3,
+  onError: (err, id) => console.warn(`Task ${id} failed:`, err.message),
+});
+
+// Priority ordering
+const controller = new AbortController();
+const critical = queue.add(
+  (signal) => fetch("/api/important", { signal }),
+  { priority: "high" }
+);
+const background = queue.add(
+  (signal) => fetch("/api/sync", { signal }),
+  { priority: "low", signal: controller.signal }
+);
+
+controller.abort(); // cancels `background` with QueueAbortError
+
+await queue.flush();
+```
+
+---
+
+## RequestBatcher
+
+Coalesces same-key HTTP requests within a time window into a single fetcher invocation. All callers sharing the same key receive the same resolved value.
+
+The deduplication key defaults to `"METHOD:url:body"` and is fully customisable.
+
+### Constructor
+
+```ts
+const batcher = new RequestBatcher({ windowMs: 50 });
+```
+
+| Option | Type | Default | Description |
+| --- | --- | --- | --- |
+| `windowMs` | `number` | — | Time window in ms. Must be > 0. |
+| `maxSize` | `number` | `Infinity` | Max requests per batch. Flushes early when reached. |
+| `sliding` | `boolean` | `false` | Reset the timer on each new request (sliding window). |
+| `keyFn` | `(url, init) => string` | `"METHOD:url:body"` | Custom key function for grouping requests. |
+
+### `add(url, init, fetcher)`
+
+Adds a request to the current window. Returns `Promise<T>` resolving to the response.
+
+```ts
+const result = await batcher.add(
+  "/api/users",
+  { method: "GET" },
+  (url, init) => fetch(url, init).then(r => r.json())
+);
+```
+
+### `flush()`
+
+Forces immediate dispatch of all pending batches. Useful in tests or when you need results without waiting for the window.
+
+```ts
+await batcher.flush();
+```
+
+### `pendingCount`
+
+Number of requests waiting across all batch buckets.
+
+```ts
+batcher.add("/a", { method: "GET" }, fetcher);
+batcher.add("/a", { method: "GET" }, fetcher);
+console.log(batcher.pendingCount); // 2
+```
+
+### Full example
+
+```ts
+import { RequestBatcher } from "bytekit/async";
+
+const batcher = new RequestBatcher({ windowMs: 50, maxSize: 20 });
+
+// These three calls share the same key → fetcher invoked once
+const [a, b, c] = await Promise.all([
+  batcher.add("/api/users", { method: "GET" }, fetch),
+  batcher.add("/api/users", { method: "GET" }, fetch),
+  batcher.add("/api/users", { method: "GET" }, fetch),
+]);
+// After 50ms (or when flush() is called), fetch fires once and all three resolve
+
+// Different body → different key → dispatched separately
+batcher.add("/api/items", { method: "POST", body: '{"id":1}' }, fetch);
+batcher.add("/api/items", { method: "POST", body: '{"id":2}' }, fetch);
+```
+
+### ApiClient integration
+
+Pass `queue` or `batch` options to `ApiClient` for transparent integration:
+
+```ts
+import { ApiClient } from "bytekit";
+
+// Concurrency-limited: at most 5 requests in-flight at once
+const client = new ApiClient({
+  baseUrl: "https://api.example.com",
+  queue: { concurrency: 5 },
+});
+
+// Deduplication: same-URL GETs within 100ms share one response
+const batchedClient = new ApiClient({
+  baseUrl: "https://api.example.com",
+  batch: { windowMs: 100 },
+});
 ```
 
 ---
