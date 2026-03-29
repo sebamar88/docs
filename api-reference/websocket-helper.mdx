@@ -1,212 +1,280 @@
 ---
 title: "WebSocketHelper"
-description: "Managed WebSocket connections with automatic reconnection, exponential backoff, and typed events."
+description: "Managed WebSocket connections with automatic reconnection, exponential backoff, schema validation, and pong detection."
 ---
 
 ## Import
 
 ```ts
-import { WebSocketHelper } from "bytekit/websocket";
+import { WebSocketHelper } from "bytekit";
 ```
 
 ## What it does
 
-`WebSocketHelper` wraps the native `WebSocket` API with automatic reconnection, exponential backoff, ping/keep-alive, and a typed event system. It handles the full lifecycle — connect, send, reconnect, and graceful disconnect — so you can focus on message handling.
+`WebSocketHelper` wraps the native `WebSocket` API with automatic reconnection, configurable backoff strategies, per-type schema validation, ping/pong heartbeat monitoring, and a typed event system. It handles the full lifecycle — connect, send, validate, reconnect, and graceful disconnect — so you can focus on message handling.
 
 ## Constructor
 
 ```ts
-const ws = new WebSocketHelper(url, options?: WebSocketHelperOptions);
+const ws = new WebSocketHelper(url, options?: WebSocketOptions);
 ```
 
 | Parameter | Type | Description |
 | --- | --- | --- |
 | `url` | `string` | WebSocket server URL (e.g. `wss://api.example.com/ws`). |
-| `options` | `WebSocketHelperOptions` | Optional configuration. |
+| `options` | `WebSocketOptions` | Optional configuration. |
 
-### `WebSocketHelperOptions`
+### `WebSocketOptions`
 
 | Property | Type | Default | Description |
 | --- | --- | --- | --- |
-| `protocols` | `string \| string[]` | — | Subprotocols passed to the `WebSocket` constructor. |
 | `reconnect` | `boolean` | `true` | Enable automatic reconnection on close/error. |
 | `maxReconnectAttempts` | `number` | `5` | Maximum reconnection attempts before giving up. |
-| `reconnectInterval` | `number` | `1000` | Initial delay between reconnect attempts (ms). |
-| `reconnectBackoff` | `number` | `1.5` | Multiplier applied to `reconnectInterval` after each attempt. |
-| `maxReconnectInterval` | `number` | `30000` | Upper bound for the reconnect delay (ms). |
-| `pingInterval` | `number` | — | Interval for automatic ping messages (ms). Disabled if omitted. |
-| `pingMessage` | `string \| (() => string)` | — | Payload sent as the ping message. |
-| `onOpen` | `(event: Event) => void` | — | Shortcut handler for the `open` event. |
-| `onMessage` | `(event: MessageEvent) => void` | — | Shortcut handler for the `message` event. |
-| `onClose` | `(event: CloseEvent) => void` | — | Shortcut handler for the `close` event. |
-| `onError` | `(event: Event) => void` | — | Shortcut handler for the `error` event. |
-| `onReconnect` | `(attempt: number) => void` | — | Called on each reconnection attempt. |
-| `serializer` | `(data: unknown) => string` | `JSON.stringify` | Serializer for `sendJSON`. |
-| `deserializer` | `(raw: string) => unknown` | `JSON.parse` | Deserializer for incoming messages. |
+| `reconnectDelayMs` | `number` | `3000` | Base delay for reconnect attempts (ms). Used as the unit for backoff calculations. |
+| `heartbeatIntervalMs` | `number` | `30000` | Interval between automatic ping messages (ms). |
+| `messageTimeout` | `number` | `5000` | Timeout for `request()` calls (ms). |
+| `backoffStrategy` | `BackoffStrategy` | `"linear"` | Delay strategy: `"linear"`, `"exponential"`, or a custom `(attempt) => number` function. |
+| `maxReconnectDelayMs` | `number` | `30000` | Upper bound for computed reconnect delay (ms). Only applies to `"exponential"`. |
+| `jitter` | `boolean` | `false` | Add Full Jitter to exponential backoff (randomises delay in `[0, cap]`). |
+| `heartbeatTimeoutMs` | `number` | `5000` | Time to wait for any message after a ping before forcing `close()` (ms). |
+| `schemas` | `Record<string, SchemaAdapter>` | `{}` | Per-message-type validators. Messages that fail validation are dropped and `onValidationError` fires. |
+
+### `BackoffStrategy`
+
+```ts
+type BackoffStrategy = "linear" | "exponential" | ((attempt: number) => number);
+```
+
+| Value | Delay formula |
+| --- | --- |
+| `"linear"` | `reconnectDelayMs × attempt` |
+| `"exponential"` | `min(maxReconnectDelayMs, reconnectDelayMs × 2^(attempt−1))`, optionally jittered |
+| `(attempt) => number` | Your function — full control |
 
 ## Methods
 
 ### `connect()`
 
 ```ts
-ws.connect();
+await ws.connect();
 ```
 
-Opens the WebSocket connection. Safe to call multiple times — no-ops if already connected.
+Opens the WebSocket connection. Returns a `Promise` that resolves on `open` or rejects on immediate error.
 
-### `disconnect(code?, reason?)`
+### `close()`
 
 ```ts
-ws.disconnect(1000, "User navigated away");
+ws.close();
 ```
 
-Closes the connection and stops reconnection attempts.
+Closes the connection and permanently stops reconnection. Use this for intentional disconnects.
 
-| Parameter | Type | Default | Description |
-| --- | --- | --- | --- |
-| `code` | `number` | `1000` | WebSocket close code. |
-| `reason` | `string` | — | Human-readable close reason. |
-
-### `send(data)`
+### `send(type, data)`
 
 ```ts
-ws.send("ping");
+ws.send("subscribe", { channel: "orderbook" });
 ```
 
-Sends a raw string or `ArrayBuffer` through the socket.
+Sends a JSON message with the shape `{ type, data, timestamp }`.
 
-### `sendJSON(data)`
+| Parameter | Type | Description |
+| --- | --- | --- |
+| `type` | `string` | Message type identifier. |
+| `data` | `T` | Payload — any serialisable value. |
 
-```ts
-ws.sendJSON({ type: "subscribe", channel: "trades" });
-```
-
-Serializes `data` with the configured `serializer` and sends it.
-
-### `on(event, handler)`
+### `on(type, handler)`
 
 ```ts
-const unsub = ws.on("message", (payload) => {
-  console.log("Received:", payload);
+const unsub = ws.on("trade", (data) => {
+  console.log("Trade received:", data);
 });
 
-// Later…
+// Stop listening:
 unsub();
 ```
 
-Registers an event handler and returns an **unsubscribe** function.
+Subscribes to messages of a given `type`. Returns an **unsubscribe** function.
 
-### `off(event, handler)`
-
-```ts
-ws.off("message", handler);
-```
-
-Removes a previously registered handler.
-
-### `waitForConnection(timeout?)`
+### `onError(handler)`
 
 ```ts
-await ws.waitForConnection(5000);
-ws.sendJSON({ type: "hello" });
+ws.onError((error) => console.error("WS error:", error));
 ```
 
-Returns a promise that resolves when the socket enters the `open` state, or rejects after `timeout` ms.
+Subscribes to connection and handler errors. Returns an unsubscribe function.
 
-### `getState()`
+### `onReconnect(handler)`
 
 ```ts
-const state = ws.getState();
-// "connecting" | "open" | "closing" | "closed"
+const unsub = ws.onReconnect((attempt, delay) => {
+  console.log(`Reconnecting — attempt ${attempt} in ${delay}ms`);
+});
 ```
 
-Returns the current connection state.
+Fires just before each reconnect delay begins. Receives the 1-based attempt number and the computed delay. Returns an unsubscribe function.
 
-### `getReconnectAttempts()`
+### `onMaxRetriesReached(handler)`
 
 ```ts
-console.log(`Reconnect attempts: ${ws.getReconnectAttempts()}`);
+ws.onMaxRetriesReached(() => {
+  showError("Connection lost. Please refresh.");
+});
 ```
 
-Returns the number of reconnect attempts since the last successful connection.
+Fires once when all `maxReconnectAttempts` are exhausted. No further reconnection will be attempted. Returns an unsubscribe function.
+
+### `onValidationError(handler)`
+
+```ts
+ws.onValidationError((error, message) => {
+  console.warn(`Invalid message of type "${message.type}":`, error.message);
+});
+```
+
+Fires when a message fails schema validation. The message is **dropped** — `on()` handlers are not called. Returns an unsubscribe function.
+
+### `request(type, data, responseType?)`
+
+```ts
+const response = await ws.request<OrderRequest, OrderConfirmation>(
+  "order:create",
+  { symbol: "BTC-USD", qty: 1 }
+);
+```
+
+Sends a message and waits for the matching response type (`${type}:response` by default). Rejects after `messageTimeout` ms.
+
+| Parameter | Type | Default | Description |
+| --- | --- | --- | --- |
+| `type` | `string` | — | Request message type. |
+| `data` | `TRequest` | — | Request payload. |
+| `responseType` | `string` | `${type}:response` | Expected response message type. |
 
 ### `isConnected()`
 
 ```ts
 if (ws.isConnected()) {
-  ws.sendJSON(message);
+  ws.send("ping", {});
 }
 ```
 
-Returns `true` if the socket is in the `open` state.
+Returns `true` if the socket is in the `OPEN` state.
 
-## Events
+### `getState()`
 
-| Event | Payload | Description |
-| --- | --- | --- |
-| `open` | `Event` | Connection established. |
-| `message` | `MessageEvent` | Message received. |
-| `close` | `CloseEvent` | Connection closed. |
-| `error` | `Event` | Connection error. |
-| `reconnect` | `number` (attempt) | Reconnection attempt started. |
-| `reconnect_failed` | — | All reconnection attempts exhausted. |
+```ts
+const state = ws.getState(); // WebSocket.readyState number
+```
+
+Returns the raw `WebSocket.readyState` value (`0–3`).
 
 ## Examples
 
-### Real-time notifications
+### Basic connection with typed messages
 
 ```ts
-import { WebSocketHelper } from "bytekit/websocket";
+import { WebSocketHelper } from "bytekit";
 
-const ws = new WebSocketHelper("wss://api.example.com/notifications", {
-  reconnect: true,
-  maxReconnectAttempts: 10,
-  reconnectBackoff: 2,
-  onOpen: () => console.log("Connected"),
-  onReconnect: (attempt) => console.log(`Reconnecting (${attempt})…`),
+interface TradeEvent {
+  symbol: string;
+  price: number;
+  qty: number;
+}
+
+const ws = new WebSocketHelper("wss://api.example.com/ws");
+
+await ws.connect();
+
+ws.on<TradeEvent>("trade", (data) => {
+  console.log(`${data.symbol} @ ${data.price}`);
 });
 
-ws.on("message", (event) => {
-  const notification = JSON.parse(event.data);
-  showToast(notification.title);
-});
-
-ws.connect();
+ws.send("subscribe", { channel: "trades" });
 ```
 
-### JSON messaging with auto-serialization
+### Exponential backoff with reconnect events
 
 ```ts
-import { WebSocketHelper } from "bytekit/websocket";
+import { WebSocketHelper } from "bytekit";
 
 const ws = new WebSocketHelper("wss://api.example.com/ws", {
-  pingInterval: 30_000,
-  pingMessage: JSON.stringify({ type: "ping" }),
+  backoffStrategy: "exponential",
+  reconnectDelayMs: 1000,
+  maxReconnectDelayMs: 30000,
+  jitter: true,
 });
 
-ws.connect();
-
-await ws.waitForConnection(5000);
-ws.sendJSON({ type: "subscribe", channel: "orderbook" });
-
-ws.on("message", (event) => {
-  const msg = JSON.parse(event.data);
-  if (msg.type === "snapshot") renderOrderbook(msg.data);
+ws.onReconnect((attempt, delay) => {
+  console.log(`Reconnect attempt ${attempt} in ${delay}ms`);
 });
+
+ws.onMaxRetriesReached(() => {
+  showBanner("Connection lost — please refresh the page.");
+});
+
+await ws.connect();
+```
+
+### Schema validation with Zod
+
+```ts
+import { WebSocketHelper } from "bytekit";
+import { z } from "zod";
+
+const TradeSchema = z.object({
+  symbol: z.string(),
+  price: z.number().positive(),
+  qty: z.number().positive(),
+});
+
+const ws = new WebSocketHelper("wss://api.example.com/ws", {
+  schemas: {
+    trade: TradeSchema, // SchemaAdapter — any object with .parse()
+  },
+});
+
+ws.onValidationError((error, msg) => {
+  console.warn(`Dropped invalid "${msg.type}" message:`, error.message);
+});
+
+ws.on("trade", (data) => {
+  // data is a validated TradeSchema output — safe to use
+  renderTrade(data);
+});
+
+await ws.connect();
+```
+
+### Pong detection (forced close on silence)
+
+```ts
+import { WebSocketHelper } from "bytekit";
+
+const ws = new WebSocketHelper("wss://api.example.com/ws", {
+  heartbeatIntervalMs: 15000, // send ping every 15s
+  heartbeatTimeoutMs: 5000,   // force-close if no message within 5s of ping
+  backoffStrategy: "exponential",
+});
+
+// Any incoming message resets the pong timer automatically.
+// If the server goes silent after a ping, ws.close() fires and
+// the reconnect pipeline takes over.
+
+await ws.connect();
 ```
 
 ### Graceful shutdown
 
 ```ts
 window.addEventListener("beforeunload", () => {
-  ws.disconnect(1000, "Page unload");
+  ws.close();
 });
 ```
 
 <Tip>
-  Use `waitForConnection` after calling `connect()` to safely queue messages without worrying about the socket state.
+  All `on*` subscription methods return an unsubscribe function. Store and call it when the component unmounts to avoid memory leaks.
 </Tip>
 
 <Warning>
-  When `reconnect` is `true`, the helper will attempt to reconnect on unexpected closures. Call `disconnect()` explicitly to stop reconnection and close the connection cleanly.
+  When `reconnect` is `true`, the helper reconnects on unexpected closures. Call `close()` explicitly to stop reconnection and close the connection cleanly. Calling `close()` also clears any pending pong timeout timer.
 </Warning>
