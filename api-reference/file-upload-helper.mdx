@@ -107,11 +107,13 @@ Returns metadata about a `File` object.
 | --- | --- | --- | --- |
 | `fieldName` | `string` | `"file"` | Form field name sent to the server. |
 | `headers` | `Record<string, string>` | — | Extra request headers. |
-| `onProgress` | `(percent: number) => void` | — | Progress callback (0–100). |
+| `onProgress` | `(percent: number) => void` | — | Progress callback (0–100). Fires once per chunk, even when uploading concurrently. |
 | `method` | `string` | `"POST"` | HTTP method. |
 | `timeout` | `number` | — | Request timeout in ms. |
-| `chunkSize` | `number` | `1_048_576` | Chunk size for chunked uploads. |
-| `maxRetries` | `number` | `0` | Retries per chunk on failure. |
+| `chunkSize` | `number` | `1_048_576` | Chunk size for chunked uploads. Values ≤ 0 fall back to this default. |
+| `maxRetries` | `number` | `0` | Retries per chunk on failure (exponential back-off). |
+| `resumeFrom` | `number` | `0` | 0-based chunk index to start from, skipping all prior chunks. Pass `uploadedChunks` from a previous failed `UploadResult` to resume an interrupted upload. Negative values are clamped to `0`. |
+| `concurrency` | `number` | `1` | Maximum number of chunks uploaded in parallel. Chunks are sent in sequential batches of this size. Values `< 1` are clamped to `1` (sequential). |
 
 ### `UploadResult`
 
@@ -123,6 +125,8 @@ Returns metadata about a `File` object.
 | `error` | `string` | Error message (if failed). |
 | `fileName` | `string` | Original file name. |
 | `duration` | `number` | Upload duration in ms. |
+| `uploadedChunks` | `number` | Chunks successfully sent (absolute count, includes any `resumeFrom` offset). On success equals `totalChunks`. On failure, safe to pass directly as `resumeFrom` on the next call. |
+| `totalChunks` | `number` | Total number of chunks the file was divided into at the given `chunkSize`. |
 
 ### `ValidationResult`
 
@@ -192,6 +196,57 @@ const result = await FileUploadHelper.uploadChunked(
 if (result.success) {
   console.log(`Uploaded in ${result.duration}ms`);
 }
+```
+
+### Resumable upload
+
+Use `uploadedChunks` from a failed result as `resumeFrom` on the next call.
+The server must store chunks by `X-Upload-ID` so they can be reassembled.
+
+```ts
+import { FileUploadHelper } from "bytekit/file-upload";
+
+const CHUNK_SIZE = 2 * 1024 * 1024; // 2 MB
+
+let result = await FileUploadHelper.uploadChunked("/api/videos/upload", videoFile, {
+  chunkSize: CHUNK_SIZE,
+  maxRetries: 2,
+  onProgress: (pct) => progressBar.update(pct),
+});
+
+// Resume up to 3 times on failure
+for (let attempt = 0; attempt < 3 && !result.success; attempt++) {
+  console.warn(
+    `Upload interrupted at chunk ${result.uploadedChunks}/${result.totalChunks}. Resuming…`
+  );
+
+  result = await FileUploadHelper.uploadChunked("/api/videos/upload", videoFile, {
+    chunkSize: CHUNK_SIZE,
+    maxRetries: 2,
+    resumeFrom: result.uploadedChunks, // skip already-uploaded chunks
+    onProgress: (pct) => progressBar.update(pct),
+  });
+}
+
+console.log(result.success ? "Done!" : `Failed: ${result.error}`);
+```
+
+### Concurrent chunks with live progress
+
+Speed up large uploads on fast connections by sending multiple chunks in parallel.
+
+```ts
+import { FileUploadHelper } from "bytekit/file-upload";
+
+const result = await FileUploadHelper.uploadChunked("/api/videos/upload", videoFile, {
+  chunkSize: 512 * 1024, // 512 KB chunks
+  concurrency: 4,         // up to 4 parallel requests
+  maxRetries: 3,
+  onProgress: (pct) => {
+    // fires once per completed chunk, even under concurrency
+    progressBar.update(pct);
+  },
+});
 ```
 
 <Tip>
