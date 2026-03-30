@@ -3,9 +3,9 @@
   "theme": "mint",
   "name": "ByteKit",
   "colors": {
-    "primary": "#16A34A",
-    "light": "#07C983",
-    "dark": "#15803D"
+    "primary": "#a31515",
+    "light": "#c93d06",
+    "dark": "#620101"
   },
   "favicon": "/favicon.svg",
   "navigation": {
