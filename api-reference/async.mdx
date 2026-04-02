@@ -375,6 +375,7 @@ const queue = new RequestQueue({ concurrency: 3 });
 | Option | Type | Required | Description |
 | --- | --- | --- | --- |
 | `concurrency` | `number` | ✅ | Max simultaneous tasks. Must be ≥ 1. |
+| `maxQueueSize` | `number` | — | Max tasks allowed in the waiting queue. `add()` rejects with `TypeError` when full. Default: `Infinity`. |
 | `onError` | `(error: Error, id: string) => void` | — | Called when a task rejects. Queue continues. |
 
 ### `add(task, options?)`
@@ -455,6 +456,7 @@ const batcher = new RequestBatcher({ windowMs: 50 });
 | --- | --- | --- | --- |
 | `windowMs` | `number` | — | Time window in ms. Must be > 0. |
 | `maxSize` | `number` | `Infinity` | Max requests per batch. Flushes early when reached. |
+| `maxPending` | `number` | `Infinity` | Max total pending requests across all buckets. `add()` rejects with `TypeError` when full. |
 | `sliding` | `boolean` | `false` | Reset the timer on each new request (sliding window). |
 | `keyFn` | `(url, init) => string` | `"METHOD:url:body"` | Custom key function for grouping requests. |
 
