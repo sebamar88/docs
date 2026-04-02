@@ -17,6 +17,10 @@ import { CryptoUtils } from "bytekit/crypto-utils";
   `simpleHash` is a fast 32-bit hash intended for non-security use cases (hash maps, fingerprinting). For security-sensitive hashing use `hash()` or `hmac()`.
 </Warning>
 
+<Warning>
+  **v3 breaking change:** `hash()` and `hmac()` now **throw** if no secure crypto backend (`crypto.subtle` in browsers, or Node.js `crypto`) is available. The previous silent fallback to weak algorithms has been removed.
+</Warning>
+
 ## Methods
 
 ### `generateToken(length?)`
@@ -89,6 +93,10 @@ const digest = await CryptoUtils.hash("sensitive-data", "SHA-512");
 
 Computes a cryptographic hash using the SubtleCrypto API.
 
+<Warning>
+  **v3:** Throws if no secure crypto backend is available. Ensure `crypto.subtle` (browser) or Node.js `crypto` is present before calling.
+</Warning>
+
 | Parameter | Type | Default | Description |
 | --- | --- | --- | --- |
 | `str` | `string` | — | Input string. |
@@ -101,6 +109,10 @@ const signature = await CryptoUtils.hmac(payload, webhookSecret, "SHA-256");
 ```
 
 Computes an HMAC digest.
+
+<Warning>
+  **v3:** Throws if no secure crypto backend is available instead of returning an empty string.
+</Warning>
 
 | Parameter | Type | Default | Description |
 | --- | --- | --- | --- |

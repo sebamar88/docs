@@ -35,6 +35,7 @@ const api = new ApiClient(config: ApiClientConfig);
 | `fetchImpl` | `typeof fetch` | `globalThis.fetch` | Custom fetch implementation. |
 | `errorMessages` | `Record<Locale, Record<number, string>>` | Built-in | Override default error messages per status code and locale. |
 | `logHeaders` | `boolean` | `false` | Include headers in log output. |
+| `logSensitiveData` | `boolean` | `false` | Allow raw request/response payload logging. Disabled by default since v3 to prevent secrets leaking into logs. Do not enable in production. |
 | `redactHeaderKeys` | `string[]` | Auth/cookie keys | Header keys to redact from logs. |
 
 ## Basic setup
@@ -78,6 +79,7 @@ const api = new ApiClient({
 | `skipRetry` | `boolean` | Skip retry policy for this request. |
 | `skipInterceptors` | `boolean` | Skip interceptors for this request. |
 | `body` | `FormData \| string \| Record<string, unknown>` | Request body (when using options form). |
+| `logSensitiveData` | `boolean` | Allow raw payload logging for this request. Overrides the client-level setting. |
 
 ### `ListOptions<T>`
 
@@ -186,6 +188,10 @@ try {
 ```
 
 `ApiError` also exposes a `details` getter, `toJSON()`, and a readable `toString()` for debugging.
+
+<Warning>
+  **v3:** `ApiError#toJSON()`, `ApiError#toString()`, and `ApiError#details` now sanitize the response body by default. Sensitive fields (tokens, passwords, cookies, API keys, etc.) are redacted and long strings are truncated. If you need the raw body, read `error.body` directly in controlled code — do not log or serialize it in production.
+</Warning>
 
 ## Factory
 
